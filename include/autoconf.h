@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2018 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -31,10 +31,16 @@
 /*
  * Wi-Fi Functions Config
  */
-#define CONFIG_80211N_HT
+
 #define CONFIG_RECV_REORDERING_CTRL
+
+#define CONFIG_80211N_HT
 #define CONFIG_80211AC_VHT
-#define CONFIG_IEEE80211_BAND_5GHZ
+#ifdef CONFIG_80211AC_VHT
+	#ifndef CONFIG_80211N_HT
+		#define CONFIG_80211N_HT
+	#endif
+#endif
 
 /* Set CONFIG_IOCTL_CFG80211 from Makefile */
 #ifdef CONFIG_IOCTL_CFG80211
@@ -57,7 +63,6 @@
 		#define CONFIG_HOSTAPD_MLME
 	#endif
 	/*#define CONFIG_FIND_BEST_CHANNEL*/
-	#define CONFIG_TX_MCAST2UNI	/* Support IP multicast->unicast */
 #endif
 
 #define CONFIG_P2P
@@ -90,15 +95,7 @@
 	#define CONFIG_TDLS_CH_SW
 #endif /* CONFIG_TDLS */
 
-/* Set CONFIG_CONCURRENT_MODE from Makefile */
-#ifdef CONFIG_CONCURRENT_MODE
-	/*#define CONFIG_HWPORT_SWAP*/		/* Port0->Sec , Port1->Pri */
-	/*#define CONFIG_RUNTIME_PORT_SWITCH*/
-	#ifndef CONFIG_RUNTIME_PORT_SWITCH
-		/* #define CONFIG_TSF_RESET_OFFLOAD */	/* For 2 PORT TSF SYNC. */
-	#endif
-	/*#define DBG_RUNTIME_PORT_SWITCH*/
-#endif /* CONFIG_CONCURRENT_MODE */
+/*#define CONFIG_RTW_80211K*/
 
 #define CONFIG_LAYER2_ROAMING
 #define CONFIG_LAYER2_ROAMING_RESUME
@@ -110,7 +107,7 @@
  * Hareware/Firmware Related Config
  */
 /* Set CONFIG_BT_COEXIST from Makefile */
-/* Set CONFIG_ANTENNA_DIVERSITY from Makefile */
+/*#define CONFIG_ANTENNA_DIVERSITY*/
 /*#define SUPPORT_HW_RFOFF_DETECTED*/
 /*#define CONFIG_RTW_LED*/
 #ifdef CONFIG_RTW_LED
@@ -132,14 +129,17 @@
 #define DFT_TRX_SHARE_MODE	1
 #endif /* CONFIG_SUPPORT_TRX_SHARED */
 
-#define RTW_AMPDU_AGG_RETRY_NEW
-
 /*
  * Software feature Related Config
  */
 #define RTW_HALMAC		/* Use HALMAC architecture, necessary for 8822B */
 #define CONFIG_RECV_THREAD_MODE
+#ifdef CONFIG_RECV_THREAD_MODE
+#define RTW_RECV_THREAD_HIGH_PRIORITY
+#endif/*CONFIG_RECV_THREAD_MODE*/
 
+/* Speed up C2H handle and avoid race condition */
+#define RTW_HANDLE_C2H_IN_ISR
 
 /*
  * Interface Related Config
@@ -150,6 +150,13 @@
 /*#define RTW_XMIT_THREAD_HIGH_PRIORITY_AGG*/
 /*#define CONFIG_SDIO_TX_ENABLE_AVAL_INT*/ /* not implemented yet */
 #define CONFIG_SDIO_RX_COPY
+#ifdef CONFIG_PREALLOC_RX_SKB_BUFFER
+#ifndef CONFIG_SDIO_RX_COPY
+#error "CONFIG_PREALLOC_RX_SKB_BUFFER would need CONFIG_SDIO_RX_COPY"
+#endif
+#endif /* CONFIG_PREALLOC_RX_SKB_BUFFER */
+
+#define CONFIG_SDIO_HOOK_DEV_SHUTDOWN
 
 
 /*
@@ -165,7 +172,6 @@
 /*#define CONFIG_FILE_FWIMG*/
 #define CONFIG_LONG_DELAY_ISSUE
 /*#define CONFIG_PATCH_JOIN_WRONG_CHANNEL*/
-#define CONFIG_ATTEMPT_TO_FIX_AP_BEACON_ERROR
 
 #ifdef CONFIG_RTW_NAPI
 #define CONFIG_RTW_NAPI_DYNAMIC
@@ -257,6 +263,50 @@
 #define CONFIG_HW_ANTENNA_DIVERSITY
 #endif /* CONFIG_ANTENNA_DIVERSITY */
 
+/*
+ * Platform
+ */
+#ifdef CONFIG_PLATFORM_HISILICON_HI3798_MV200_HDMI_DONGLE
+	#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY
+		#undef RTW_XMIT_THREAD_HIGH_PRIORITY
+	#endif
+	#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
+		#undef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
+	#endif
+
+	#define CONFIG_REDUCE_TX_CPU_LOADING
+
+	#define CONFIG_STA_SCAN_BACKOP
+
+	#ifdef CONFIG_POWER_SAVING
+	#ifdef CONFIG_LPS
+		#define CONFIG_LPS_NOT_LEAVE_FOR_ICMP
+		#define CONFIG_LPS_CHK_BY_TP
+		#ifdef CONFIG_LPS_CHK_BY_TP
+			#define LPS_TX_TP_TH		60 /*Mbps*/
+			#define LPS_RX_TP_TH	60 /*Mbps*/
+			#define LPS_BI_TP_TH		60 /*Mbps*//*TX + RX*/
+			#define LPS_TP_CHK_CNT	1 /*10s*/
+			#define LPS_CHK_PKTS_TX	80000
+			#define LPS_CHK_PKTS_RX	80000
+			#define LPS_BCN_CNT_MONITOR
+		#endif
+		#define CONFIG_LPS_PWR_TRACKING
+		#ifdef CONFIG_LPS_PWR_TRACKING
+		#define THERMAL_DIFF_TH 2
+		#endif
+	#endif /*CONFIG_LPS*/
+
+	#define CONFIG_CTRL_TXSS_BY_TP
+	#ifdef CONFIG_CTRL_TXSS_BY_TP
+		#define TXSS_TP_TH	40 /*Mbps 20M:72.2, 40M:150, 80M:325, 160M:650*/
+		#define TXSS_TP_CHK_CNT	3 /* unit 2s*/
+		#define DBG_CTRL_TXSS
+	#endif
+
+	#endif/*CONFIG_POWER_SAVING*/
+#endif /*CONFIG_PLATFORM_HISILICON_HI3798_MV200_HDMI_DONGLE*/
+
 
 /*
  * Debug Related Config
@@ -267,12 +317,18 @@
 #define DBG	0	/* for ODM & BTCOEX debug */
 #endif /* !CONFIG_RTW_DEBUG */
 
-#define CONFIG_PROC_DEBUG
-
 #define DBG_CONFIG_ERROR_DETECT
 #if 0
 #define DBG_XMIT_BUF
 #define DBG_XMIT_BUF_EXT
 #define CONFIG_FW_C2H_DEBUG
 #define DBG_THREAD_PID
+#define DBG_CPU_INFO
 #endif
+
+#define DBG_SDIO	1
+
+/*#define CONFIG_TDMADIG*/
+#ifdef CONFIG_TDMADIG
+#endif/*CONFIG_TDMADIG*/
+

@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2017 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -63,6 +63,15 @@ static void stop_rx_handle(PADAPTER p)
 static _pkt *alloc_recvbuf_skb(struct recv_buf *recvbuf, u32 size)
 {
 	_pkt *skb;
+
+#ifdef CONFIG_PREALLOC_RX_SKB_BUFFER
+	skb = rtw_alloc_skb_premem(size);
+	if (!skb) {
+		RTW_WARN("%s: Fail to get pre-alloc skb! size=%d\n",
+			 __FUNCTION__, size);
+		return NULL;
+	}
+#else /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
 	u32 alignsz = RECVBUFF_ALIGN_SZ;
 #ifdef PLATFORM_LINUX
 	SIZE_PTR tmpaddr = 0;
@@ -78,11 +87,14 @@ static _pkt *alloc_recvbuf_skb(struct recv_buf *recvbuf, u32 size)
 	}
 
 #ifdef PLATFORM_LINUX
-	skb->dev = recvbuf->adapter->pnetdev;
-
 	tmpaddr = (SIZE_PTR)skb->data;
 	alignment = tmpaddr & (alignsz - 1);
 	skb_reserve(skb, alignsz - alignment);
+#endif /* PLATFORM_LINUX */
+#endif /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
+
+#ifdef PLATFORM_LINUX
+	skb->dev = recvbuf->adapter->pnetdev;
 #endif /* PLATFORM_LINUX */
 
 	recvbuf->pskb = skb;
@@ -140,7 +152,11 @@ static void free_recvbuf_skb(struct recv_buf *recvbuf)
 	if (!skb)
 		return;
 	recvbuf->pskb = NULL;
+#ifdef CONFIG_PREALLOC_RX_SKB_BUFFER
+	rtw_free_skb_premem(skb);
+#else /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
 	rtw_skb_free(skb);
+#endif /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
 }
 
 void rtl8822bs_free_recvbuf_skb(struct recv_buf *recvbuf)
@@ -507,43 +523,52 @@ static u8 recvbuf_handler(struct recv_buf *recvbuf)
 	return ret;
 }
 
+static struct recv_buf* c2h_hdl(struct _ADAPTER *a, struct recv_buf *recvbuf)
+{
+	u8 c2h = 0;
+
+
+	c2h = GET_RX_DESC_C2H_8822B(recvbuf->pdata);
+	if (c2h) {
+		rtl8822b_c2h_handler_no_io(a, recvbuf->pdata, recvbuf->len);
+
+		/* free recv_buf */
+		rtl8822bs_free_recvbuf_skb(recvbuf);
+		rtw_enqueue_recvbuf(recvbuf, &a->recvpriv.free_recv_buf_queue);
+		recvbuf = NULL;
+	}
+
+	return recvbuf;
+}
+
 s32 rtl8822bs_recv_hdl(_adapter *adapter)
 {
 	struct recv_priv *recvpriv;
 	struct recv_buf *recvbuf;
-	u8 c2h = 0;
 	s32 ret = _SUCCESS;
 
 	recvpriv = &adapter->recvpriv;
-
-#ifdef CONFIG_RTW_NAPI_DYNAMIC
-	if (adapter->registrypriv.en_napi) {
-		struct dvobj_priv *d;
-		struct registry_priv *registry;
-
-		d = adapter_to_dvobj(adapter);
-		registry = &adapter->registrypriv;
-		if (d->traffic_stat.cur_rx_tp > registry->napi_threshold)
-			d->en_napi_dynamic = 1;
-		else
-			d->en_napi_dynamic = 0;
-	}
-#endif /* CONFIG_RTW_NAPI_DYNAMIC */
 	
 	do {
 		recvbuf = rtw_dequeue_recvbuf(&recvpriv->recv_buf_pending_queue);
 		if (NULL == recvbuf)
 			break;
 
-		c2h = GET_RX_DESC_C2H_8822B(recvbuf->pdata);
-		if (c2h)
-			rtl8822b_c2h_handler_no_io(adapter, recvbuf->pdata, recvbuf->len);
-		else
-			ret = recvbuf_handler(recvbuf);
+#ifndef RTW_HANDLE_C2H_IN_ISR
+		recvbuf = c2h_hdl(adapter, recvbuf);
+		if (!recvbuf)
+			continue;
+#endif /* !RTW_HANDLE_C2H_IN_ISR */
 
-		if (_SUCCESS != ret) {
-			rtw_enqueue_recvbuf_to_head(recvbuf, &recvpriv->recv_buf_pending_queue);
-			break;
+		if (adapter_to_dvobj(adapter)->processing_dev_remove != _TRUE) {
+			ret = recvbuf_handler(recvbuf);
+			if (ret != _SUCCESS) {
+				rtw_enqueue_recvbuf_to_head(recvbuf, &recvpriv->recv_buf_pending_queue);
+				break;
+			}
+		} else {
+			/* drop recv buffer */
+			RTW_PRINT("%s: drop recv buffer during dev remove!\n", __func__);
 		}
 
 		/* free recv_buf */
@@ -721,6 +746,12 @@ void rtl8822bs_rxhandler(PADAPTER adapter, struct recv_buf *recvbuf)
 	struct recv_priv *recvpriv;
 	_queue *pending_queue;
 
+
+#ifdef RTW_HANDLE_C2H_IN_ISR
+	recvbuf = c2h_hdl(adapter, recvbuf);
+	if (!recvbuf)
+		return;
+#endif /* RTW_HANDLE_C2H_IN_ISR */
 
 	recvpriv = &adapter->recvpriv;
 	pending_queue = &recvpriv->recv_buf_pending_queue;

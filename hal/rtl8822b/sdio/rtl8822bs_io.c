@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2017 Realtek Corporation.
+ * Copyright(c) 2015 - 2018 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -21,23 +21,6 @@
 #include "rtl8822bs.h"		/* rtl8822bs_get_interrupt(), rtl8822bs_clear_interrupt() and etc. */
 #include "../../hal_halmac.h"	/* rtw_halmac_sdio_get_rx_addr() */
 
-
-/*
- * Align size to guarantee I/O would be done in one command,
- * only align TX and RX FIFO size.
- */
-static size_t sdio_cmd53_align_size(size_t len)
-{
-	u32 domain;
-
-
-	if (len <= 512)
-		return len;
-
-	len = ((len + 511) / 512) * 512;
-
-	return len;
-}
 
 /*
  * For Core I/O API
@@ -92,7 +75,7 @@ u32 rtl8822bs_read_port(struct dvobj_priv *d, u32 cnt, u8 *mem)
 	buf = mem;
 
 	/* align size to guarantee I/O would be done in one command */
-	buflen = sdio_cmd53_align_size(cnt);
+	buflen = rtw_sdio_cmd53_align_size(d, cnt);
 	if (buflen != cnt) {
 		buf = rtw_zmalloc(buflen);
 		if (!buf)
@@ -166,7 +149,7 @@ u32 rtl8822bs_write_port(struct dvobj_priv *d, u32 cnt, u8 *mem)
 	cnt = _RND4(cnt);
 
 	/* align size to guarantee I/O would be done in one command */
-	txsize = sdio_cmd53_align_size(cnt);
+	txsize = rtw_sdio_cmd53_align_size(d, cnt);
 
 	ret = rtw_sdio_write_cmd53(d, txaddr, mem, txsize);
 
@@ -214,7 +197,6 @@ static u32 sdio_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *mem
 
 	ret = rtl8822bs_write_port(d, cnt, xmitbuf->pdata);
 
-exit:
 	rtw_sctx_done_err(&xmitbuf->sctx,
 		(_FAIL == ret) ? RTW_SCTX_DONE_WRITE_PORT_ERR : RTW_SCTX_DONE_SUCCESS);
 
@@ -250,13 +232,16 @@ void sdio_set_intf_ops(PADAPTER adapter, struct _io_ops *pops)
 
 static struct recv_buf *sd_recv_rxfifo(PADAPTER adapter, u32 size)
 {
+	struct dvobj_priv *d;
 	struct recv_priv *recvpriv;
 	struct recv_buf	*recvbuf;
-	u32 readsz, blksz, bufsz;
+	u32 readsz, bufsz;
 	u8 *rbuf;
 	_pkt *pkt;
 	s32 ret;
 
+
+	d = adapter_to_dvobj(adapter);
 
 	/*
 	 * Patch for some SDIO Host 4 bytes issue
@@ -265,11 +250,7 @@ static struct recv_buf *sd_recv_rxfifo(PADAPTER adapter, u32 size)
 	readsz = RND4(size);
 
 	/* round to block size */
-	blksz = adapter_to_dvobj(adapter)->intf_data.block_transfer_len;
-	if (readsz > blksz)
-		bufsz = _RND(readsz, blksz);
-	else
-		bufsz = readsz;
+	bufsz = rtw_sdio_cmd53_align_size(d, readsz);
 
 	/* 1. alloc recvbuf */
 	recvpriv = &adapter->recvpriv;
@@ -291,7 +272,7 @@ static struct recv_buf *sd_recv_rxfifo(PADAPTER adapter, u32 size)
 
 	/* 3. read data from rxfifo */
 	rbuf = skb_put(pkt, size);
-	ret = rtl8822bs_read_port(adapter_to_dvobj(adapter), bufsz, rbuf);
+	ret = rtl8822bs_read_port(d, bufsz, rbuf);
 	if (_FAIL == ret) {
 		RTW_ERR("%s: read port FAIL!\n", __FUNCTION__);
 		rtl8822bs_free_recvbuf_skb(recvbuf);
@@ -308,12 +289,16 @@ static struct recv_buf *sd_recv_rxfifo(PADAPTER adapter, u32 size)
 
 	return recvbuf;
 }
-
+#ifdef CONFIG_RECV_THREAD_MODE
 static u32 sdio_recv_and_drop(PADAPTER adapter, u32 size)
 {
-	u32 readsz, blksz, bufsz;
+	struct dvobj_priv *d;
+	u32 readsz, bufsz;
 	u8 *rbuf;
 	s32 ret = _SUCCESS;
+
+
+	d = adapter_to_dvobj(adapter);
 
 	/*
 	 * Patch for some SDIO Host 4 bytes issue
@@ -322,11 +307,7 @@ static u32 sdio_recv_and_drop(PADAPTER adapter, u32 size)
 	readsz = RND4(size);
 
 	/* round to block size */
-	blksz = adapter_to_dvobj(adapter)->intf_data.block_transfer_len;
-	if (readsz > blksz)
-		bufsz = _RND(readsz, blksz);
-	else
-		bufsz = readsz;
+	bufsz = rtw_sdio_cmd53_align_size(d, readsz);
 
 	rbuf = rtw_zmalloc(bufsz);
 	if (NULL == rbuf) {
@@ -334,7 +315,7 @@ static u32 sdio_recv_and_drop(PADAPTER adapter, u32 size)
 		goto _exit;
 	}
 
-	ret = rtl8822bs_read_port(adapter_to_dvobj(adapter), bufsz, rbuf);
+	ret = rtl8822bs_read_port(d, bufsz, rbuf);
 	if (_FAIL == ret)
 		RTW_ERR("%s: read port FAIL!\n", __FUNCTION__);
 
@@ -344,7 +325,7 @@ static u32 sdio_recv_and_drop(PADAPTER adapter, u32 size)
 _exit:
 	return ret;
 }
-
+#endif
 void sd_int_dpc(PADAPTER adapter)
 {
 	PHAL_DATA_TYPE phal;
@@ -447,6 +428,7 @@ void sd_int_dpc(PADAPTER adapter)
 void sd_int_hdl(PADAPTER adapter)
 {
 	PHAL_DATA_TYPE phal;
+	u8 pwr;
 
 
 	if (RTW_CANNOT_RUN(adapter))
@@ -454,7 +436,8 @@ void sd_int_hdl(PADAPTER adapter)
 
 	phal = GET_HAL_DATA(adapter);
 
-	if (!phal->sdio_himr) {
+	rtw_hal_get_hwreg(adapter, HW_VAR_APFM_ON_MAC, &pwr);
+	if (pwr != _TRUE) {
 		RTW_WARN("%s: unexpected interrupt!\n", __FUNCTION__);
 		return;
 	}
@@ -464,13 +447,10 @@ void sd_int_hdl(PADAPTER adapter)
 		phal->sdio_hisr &= phal->sdio_himr;
 		sd_int_dpc(adapter);
 		rtl8822bs_clear_interrupt(adapter, phal->sdio_hisr);
-	}
-#if 0
-	else {
+	} else {
 		RTW_INFO("%s: HISR(0x%08x) and HIMR(0x%08x) no match!\n",
 			 __FUNCTION__, phal->sdio_hisr, phal->sdio_himr);
 	}
-#endif
 }
 
 #if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN)

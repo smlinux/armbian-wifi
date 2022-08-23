@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2017 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -59,10 +59,10 @@ exit:
 
 void rtl8822bs_get_interrupt(PADAPTER adapter, u32 *hisr, u16 *rx_len)
 {
-	u8 data[6] = {0};
+	u8 data[8] = {0};
 
 
-	rtw_read_mem(adapter, REG_SDIO_HISR_8822B, 6, data);
+	rtw_read_mem(adapter, REG_SDIO_HISR_8822B, 8, data);
 
 	if (hisr)
 		*hisr = le32_to_cpu(*(u32 *)data);
@@ -135,6 +135,7 @@ static void init_interrupt(PADAPTER adapter)
  * Assumption:
  *	Using SDIO Local register ONLY for configuration.
  */
+#if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN)
 static void clear_interrupt_all(PADAPTER adapter)
 {
 	PHAL_DATA_TYPE hal;
@@ -146,7 +147,7 @@ static void clear_interrupt_all(PADAPTER adapter)
 	hal = GET_HAL_DATA(adapter);
 	rtl8822bs_clear_interrupt(adapter, 0xFFFFFFFF);
 }
-
+#endif /*#if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN)*/
 /*
  * Description:
  *	Enalbe SDIO Host Interrupt Mask configuration on SDIO local domain.
@@ -190,10 +191,13 @@ static void _run_thread(PADAPTER adapter)
 #ifndef CONFIG_SDIO_TX_TASKLET
 	struct xmit_priv *xmitpriv = &adapter->xmitpriv;
 
-	xmitpriv->SdioXmitThread = kthread_run(rtl8822bs_xmit_thread, adapter, "RTWHALXT");
-	if (IS_ERR(xmitpriv->SdioXmitThread)) {
-		RTW_ERR("%s: start rtl8822bs_xmit_thread FAIL!!\n", __FUNCTION__);
-		xmitpriv->SdioXmitThread = NULL;
+	if (xmitpriv->SdioXmitThread == NULL) {
+		RTW_INFO(FUNC_ADPT_FMT " start RTWHALXT\n", FUNC_ADPT_ARG(adapter));
+		xmitpriv->SdioXmitThread = kthread_run(rtl8822bs_xmit_thread, adapter, "RTWHALXT");
+		if (IS_ERR(xmitpriv->SdioXmitThread)) {
+			RTW_ERR("%s: start rtl8822bs_xmit_thread FAIL!!\n", __FUNCTION__);
+			xmitpriv->SdioXmitThread = NULL;
+		}
 	}
 #endif /* !CONFIG_SDIO_TX_TASKLET */
 }
@@ -263,20 +267,6 @@ static u8 sethwreg(PADAPTER adapter, u8 variable, u8 *val)
 		rtw_write8(adapter, REG_SDIO_HRPWM1_8822B, val8);
 		break;
 
-	case HW_VAR_SET_REQ_FW_PS:
-		/*
-		 * 1. driver write 0x8f[4]=1
-		 *    request fw ps state (only can write bit4)
-		 */
-	{
-		u8 req_fw_ps = 0;
-
-		req_fw_ps = rtw_read8(adapter, 0x8f);
-		req_fw_ps |= 0x10;
-		rtw_write8(adapter, 0x8f, req_fw_ps);
-	}
-	break;
-
 	default:
 		ret = rtl8822b_sethwreg(adapter, variable, val);
 		break;
@@ -310,17 +300,12 @@ static void gethwreg(PADAPTER adapter, u8 variable, u8 *val)
 			*val |= PS_TOGGLE;
 		break;
 
-#if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN)
+#if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN) || defined(CONFIG_FWLPS_IN_IPS)
 	case HW_VAR_RPWM_TOG:
 		*val = rtw_read8(adapter, REG_SDIO_HRPWM1_8822B);
 		*val &= BIT_TOGGLE_8822B;
 		break;
 #endif
-
-	case HW_VAR_FW_PS_STATE:
-		/* driver read dword 0x88 to get fw ps state */
-		*((u16 *)val) = rtw_read16(adapter, 0x88);
-		break;
 
 	default:
 		rtl8822b_gethwreg(adapter, variable, val);
@@ -398,6 +383,7 @@ void rtl8822bs_set_hal_ops(PADAPTER adapter)
 	ops->read_adapter_info = read_adapter_info;
 
 	ops->hal_init = rtl8822bs_init;
+	ops->hal_deinit = rtl8822bs_deinit;
 
 	ops->init_xmit_priv = rtl8822bs_init_xmit_priv;
 	ops->free_xmit_priv = rtl8822bs_free_xmit_priv;

@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2017 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -20,6 +20,7 @@
 
 /* rtl8822bs_halinit.c */
 u32 rtl8822bs_init(PADAPTER);
+u32 rtl8822bs_deinit(PADAPTER);
 void rtl8822bs_init_default_value(PADAPTER);
 
 /* rtl8822bs_halmac.c */

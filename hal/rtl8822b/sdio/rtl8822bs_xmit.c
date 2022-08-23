@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2018 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -50,7 +50,10 @@ static s32 dequeue_writeport(PADAPTER adapter)
 	}
 
 #ifdef CONFIG_CHECK_LEAVE_LPS
-	traffic_check_for_leave_lps(adapter, _TRUE, pxmitbuf->agg_num);
+	#ifdef CONFIG_LPS_CHK_BY_TP
+	if (!adapter_to_pwrctl(adapter)->lps_chk_by_tp)
+	#endif
+		traffic_check_for_leave_lps(adapter, _TRUE, pxmitbuf->agg_num);
 #endif
 
 	rtw_write_port(adapter, 0, pxmitbuf->len, (u8 *)pxmitbuf);
@@ -383,7 +386,6 @@ static s32 xmit_handler(PADAPTER adapter)
 
 	pxmitpriv = &adapter->xmitpriv;
 
-wait:
 	ret = _rtw_down_sema(&pxmitpriv->SdioXmitSema);
 	if (_FAIL == ret) {
 		RTW_ERR("%s: down sema fail!\n", __FUNCTION__);
@@ -420,7 +422,11 @@ next:
 #ifdef CONFIG_REDUCE_TX_CPU_LOADING
 			rtw_msleep_os(1);
 #else
+#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
+			rtw_usleep_os(10);
+#else
 			rtw_yield_os();
+#endif
 #endif
 		goto next;
 	}
@@ -433,14 +439,21 @@ thread_return rtl8822bs_xmit_thread(thread_context context)
 	s32 ret;
 	PADAPTER adapter;
 	struct xmit_priv *pxmitpriv;
-	u8 thread_name[20] = "RTWHALXT";
+	u8 thread_name[20] = {0};
+#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
+#ifdef PLATFORM_LINUX
+	struct sched_param param = { .sched_priority = 1 };
+
+	sched_setscheduler(current, SCHED_FIFO, &param);
+#endif /* PLATFORM_LINUX */
+#endif /* RTW_XMIT_THREAD_HIGH_PRIORITY_AGG */
 
 
 	ret = _SUCCESS;
 	adapter = (PADAPTER)context;
 	pxmitpriv = &adapter->xmitpriv;
 
-	rtw_sprintf(thread_name, 20, "%s-"ADPT_FMT, thread_name, ADPT_ARG(adapter));
+	rtw_sprintf(thread_name, 20, "RTWHALXT-"ADPT_FMT, ADPT_ARG(adapter));
 	thread_enter(thread_name);
 
 	RTW_INFO("start "FUNC_ADPT_FMT"\n", FUNC_ADPT_ARG(adapter));
@@ -558,7 +571,6 @@ s32 rtl8822bs_hal_xmit(PADAPTER adapter, struct xmit_frame *pxmitframe)
 	s32 ret;
 
 
-	pxmitframe->attrib.qsel = pxmitframe->attrib.priority;
 	pxmitpriv = &adapter->xmitpriv;
 
 #ifdef CONFIG_80211N_HT
@@ -596,6 +608,7 @@ s32 rtl8822bs_init_xmit_priv(PADAPTER adapter)
 	xmitpriv = &adapter->xmitpriv;
 
 	_rtw_init_sema(&xmitpriv->SdioXmitSema, 0);
+	rtl8822b_init_xmit_priv(adapter);
 	return _SUCCESS;
 }
 

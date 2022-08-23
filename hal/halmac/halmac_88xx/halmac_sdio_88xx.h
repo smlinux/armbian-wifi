@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2016 - 2017 Realtek Corporation. All rights reserved.
+ * Copyright(c) 2016 - 2019 Realtek Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -18,89 +18,64 @@
 
 #include "../halmac_api.h"
 
-#if HALMAC_88XX_SUPPORT
+#if (HALMAC_88XX_SUPPORT && HALMAC_SDIO_SUPPORT)
 
-HALMAC_RET_STATUS
-halmac_init_sdio_cfg_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter
-);
+enum halmac_ret_status
+init_sdio_cfg_88xx(struct halmac_adapter *adapter);
 
-HALMAC_RET_STATUS
-halmac_deinit_sdio_cfg_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter
-);
+enum halmac_ret_status
+deinit_sdio_cfg_88xx(struct halmac_adapter *adapter);
 
-HALMAC_RET_STATUS
-halmac_cfg_rx_aggregation_88xx_sdio(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN PHALMAC_RXAGG_CFG phalmac_rxagg_cfg
-);
+enum halmac_ret_status
+cfg_sdio_rx_agg_88xx(struct halmac_adapter *adapter,
+		     struct halmac_rxagg_cfg *cfg);
 
-HALMAC_RET_STATUS
-halmac_cfg_tx_agg_align_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u8 enable,
-	IN u16 align_size
-);
+enum halmac_ret_status
+cfg_txagg_sdio_align_88xx(struct halmac_adapter *adapter, u8 enable,
+			  u16 align_size);
 
 u32
-halmac_reg_read_indirect_32_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u32 halmac_offset
-);
+sdio_indirect_reg_r32_88xx(struct halmac_adapter *adapter, u32 offset);
 
-HALMAC_RET_STATUS
-halmac_reg_read_nbyte_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u32 halmac_offset,
-	IN u32 halmac_size,
-	OUT u8 *halmac_data
-);
+enum halmac_ret_status
+sdio_reg_rn_88xx(struct halmac_adapter *adapter, u32 offset, u32 size,
+		 u8 *value);
 
-HALMAC_RET_STATUS
-halmac_set_bulkout_num_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u8 bulkout_num
-);
+enum halmac_ret_status
+set_sdio_bulkout_num_88xx(struct halmac_adapter *adapter, u8 num);
 
-HALMAC_RET_STATUS
-halmac_get_usb_bulkout_id_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u8 *halmac_buf,
-	IN u32 halmac_size,
-	OUT u8 *bulkout_id
-);
+enum halmac_ret_status
+get_sdio_bulkout_id_88xx(struct halmac_adapter *adapter, u8 *buf, u32 size,
+			 u8 *id);
 
-HALMAC_RET_STATUS
-halmac_sdio_cmd53_4byte_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN HALMAC_SDIO_CMD53_4BYTE_MODE cmd53_4byte_mode
-);
+enum halmac_ret_status
+sdio_cmd53_4byte_88xx(struct halmac_adapter *adapter,
+		      enum halmac_sdio_cmd53_4byte_mode mode);
 
-HALMAC_RET_STATUS
-halmac_sdio_hw_info_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN PHALMAC_SDIO_HW_INFO pSdio_hw_info
-);
+enum halmac_ret_status
+sdio_hw_info_88xx(struct halmac_adapter *adapter,
+		  struct halmac_sdio_hw_info *info);
 
-VOID
-halmac_config_sdio_tx_page_threshold_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN PHALMAC_TX_PAGE_THRESHOLD_INFO pThreshold_info
-);
+void
+cfg_sdio_tx_page_threshold_88xx(struct halmac_adapter *adapter,
+				struct halmac_tx_page_threshold_info *info);
 
-HALMAC_RET_STATUS
-halmac_convert_to_sdio_bus_offset_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	INOUT u32 *halmac_offset
-);
+enum halmac_ret_status
+cnv_to_sdio_bus_offset_88xx(struct halmac_adapter *adapter, u32 *offset);
+
+enum halmac_ret_status
+leave_sdio_suspend_88xx(struct halmac_adapter *adapter);
 
 u32
-halmac_read_indirect_sdio_88xx(
-	IN PHALMAC_ADAPTER pHalmac_adapter,
-	IN u16 halmac_offset,
-	IN HALMAC_IO_SIZE size
-);
+r_indir_sdio_88xx(struct halmac_adapter *adapter, u32 adr,
+		  enum halmac_io_size size);
+
+enum halmac_ret_status
+w_indir_sdio_88xx(struct halmac_adapter *adapter, u32 adr, u32 val,
+		  enum halmac_io_size size);
+
+enum halmac_ret_status
+en_ref_autok_sdio_88xx(struct halmac_adapter *adapter, u8 en);
 
 #endif /* HALMAC_88XX_SUPPORT */
 

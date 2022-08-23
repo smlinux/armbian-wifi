@@ -97,13 +97,9 @@ SwLedBlink(
 			_set_timer(&(pLed->BlinkTimer), LED_BLINK_SLOWLY_INTERVAL);
 			break;
 
-		case LED_BLINK_WPS: {
-			if (pLed->BlinkingLedState == RTW_LED_ON)
-				_set_timer(&(pLed->BlinkTimer), LED_BLINK_LONG_INTERVAL);
-			else
-				_set_timer(&(pLed->BlinkTimer), LED_BLINK_LONG_INTERVAL);
-		}
-		break;
+		case LED_BLINK_WPS:
+			_set_timer(&(pLed->BlinkTimer), LED_BLINK_LONG_INTERVAL);
+		        break;
 
 		default:
 			_set_timer(&(pLed->BlinkTimer), LED_BLINK_SLOWLY_INTERVAL);
@@ -119,7 +115,7 @@ SwLedBlink1(
 {
 	_adapter				*padapter = pLed->padapter;
 	PHAL_DATA_TYPE		pHalData = GET_HAL_DATA(padapter);
-	struct led_priv		*ledpriv = &(padapter->ledpriv);
+	struct led_priv		*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv		*pmlmepriv = &(padapter->mlmepriv);
 	PLED_SDIO			pLed1 = &(ledpriv->SwLed1);
 	u8					bStopBlinking = _FALSE;
@@ -503,7 +499,7 @@ SwLedBlink4(
 )
 {
 	_adapter			*padapter = pLed->padapter;
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
 	PLED_SDIO		pLed1 = &(ledpriv->SwLed1);
 	u8				bStopBlinking = _FALSE;
@@ -767,7 +763,7 @@ SwLedBlink6(
 void BlinkHandler(PLED_SDIO	pLed)
 {
 	_adapter		*padapter = pLed->padapter;
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 
 	/* RTW_INFO("%s (%s:%d)\n",__FUNCTION__, current->comm, current->pid); */
 	if (RTW_CANNOT_RUN(padapter) || (!rtw_is_hw_init_completed(padapter))) {
@@ -780,6 +776,12 @@ void BlinkHandler(PLED_SDIO	pLed)
 	}
 
 	switch (ledpriv->LedStrategy) {
+	#if CONFIG_RTW_SW_LED_TRX_DA_CLASSIFY
+	case SW_LED_MODE_UC_TRX_ONLY:
+		rtw_sw_led_blink_uc_trx_only(pLed);
+		break;
+	#endif
+
 	case SW_LED_MODE0:
 		SwLedBlink(pLed);
 		break;
@@ -858,7 +860,7 @@ SwLedControlMode0(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	PLED_SDIO	pLed = &(ledpriv->SwLed1);
 
 	/* Decide led state */
@@ -960,7 +962,7 @@ SwLedControlMode1(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv		*ledpriv = &(padapter->ledpriv);
+	struct led_priv		*ledpriv = adapter_to_led(padapter);
 	PLED_SDIO			pLed = &(ledpriv->SwLed0);
 	struct mlme_priv		*pmlmepriv = &(padapter->mlmepriv);
 	PHAL_DATA_TYPE		pHalData = GET_HAL_DATA(padapter);
@@ -1189,7 +1191,7 @@ SwLedControlMode2(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
 	PLED_SDIO		pLed = &(ledpriv->SwLed0);
 
@@ -1328,7 +1330,7 @@ SwLedControlMode3(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
 	PLED_SDIO		pLed = &(ledpriv->SwLed0);
 
@@ -1483,7 +1485,7 @@ SwLedControlMode4(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
 	PLED_SDIO		pLed = &(ledpriv->SwLed0);
 	PLED_SDIO		pLed1 = &(ledpriv->SwLed1);
@@ -1773,7 +1775,7 @@ SwLedControlMode5(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
 	PHAL_DATA_TYPE	pHalData = GET_HAL_DATA(padapter);
 	PLED_SDIO		pLed = &(ledpriv->SwLed0);
@@ -1852,7 +1854,7 @@ SwLedControlMode6(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
 	PLED_SDIO pLed0 = &(ledpriv->SwLed0);
 
@@ -1882,7 +1884,7 @@ LedControlSDIO(
 	LED_CTL_MODE		LedAction
 )
 {
-	struct led_priv	*ledpriv = &(padapter->ledpriv);
+	struct led_priv	*ledpriv = adapter_to_led(padapter);
 
 #if (MP_DRIVER == 1)
 	if (padapter->registrypriv.mp_mode == 1)
@@ -1903,11 +1905,6 @@ LedControlSDIO(
 	/* if(priv->bInHctTest) */
 	/*	return; */
 
-#ifdef CONFIG_CONCURRENT_MODE
-	if (!is_primary_adapter(padapter))
-		return;
-#endif
-
 	if ((adapter_to_pwrctl(padapter)->rf_pwrstate != rf_on &&
 	     adapter_to_pwrctl(padapter)->rfoff_reason > RF_CHANGE_BY_PS) &&
 	    (LedAction == LED_CTL_TX || LedAction == LED_CTL_RX ||
@@ -1918,6 +1915,12 @@ LedControlSDIO(
 		return;
 
 	switch (ledpriv->LedStrategy) {
+	#if CONFIG_RTW_SW_LED_TRX_DA_CLASSIFY
+	case SW_LED_MODE_UC_TRX_ONLY:
+		rtw_sw_led_ctl_mode_uc_trx_only(padapter, LedAction);
+		break;
+	#endif
+
 	case SW_LED_MODE0:
 		SwLedControlMode0(padapter, LedAction);
 		break;
