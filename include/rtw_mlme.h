@@ -526,6 +526,20 @@ enum {
 	RTW_ROAM_ACTIVE = BIT2,
 };
 
+struct beacon_keys {
+	u8 ssid[IW_ESSID_MAX_SIZE];
+	u32 ssid_len;
+	u8 ch;
+	u8 bw;
+	u8 offset;
+	u8 proto_cap; /* PROTO_CAP_XXX */
+	u8 rate_set[12];
+	u8 rate_num;
+	int encryp_protocol;
+	int pairwise_cipher;
+	int group_cipher;
+	u32 akm;
+};
 #ifdef CONFIG_RTW_80211R
 #define RTW_FT_ACTION_REQ_LMT	4
 #define RTW_FT_MAX_IE_SZ	256
@@ -933,8 +947,6 @@ struct mlme_priv {
 	#ifdef CONFIG_80211AC_VHT
 	u8 ori_vht_en;
 	#endif
-
-	u8 ap_isolate;
 #endif /* #if defined (CONFIG_AP_MODE) && defined (CONFIG_NATIVEAP_MLME) */
 
 #if defined(CONFIG_WFD) && defined(CONFIG_IOCTL_CFG80211)
@@ -1010,7 +1022,7 @@ extern void hostapd_mode_unload(_adapter *padapter);
 #endif
 
 
-extern int rtw_joinbss_event_prehandle(_adapter *adapter, u8 *pbuf, u16 status);
+extern void rtw_joinbss_event_prehandle(_adapter *adapter, u8 *pbuf, u16 status);
 extern void rtw_survey_event_callback(_adapter *adapter, u8 *pbuf);
 extern void rtw_surveydone_event_callback(_adapter *adapter, u8 *pbuf);
 extern void rtw_joinbss_event_callback(_adapter *adapter, u8 *pbuf);
@@ -1150,7 +1162,7 @@ struct wlan_network *rtw_find_same_network(_queue *scanned_queue, struct wlan_ne
 
 extern void rtw_free_assoc_resources(_adapter *adapter, u8 lock_scanned_queue);
 extern void rtw_indicate_disconnect(_adapter *adapter, u16 reason, u8 locally_generated);
-extern int rtw_indicate_connect(_adapter *adapter);
+extern void rtw_indicate_connect(_adapter *adapter);
 void rtw_indicate_scan_done(_adapter *padapter, bool aborted);
 
 void rtw_drv_scan_by_self(_adapter *padapter, u8 reason);
@@ -1256,7 +1268,7 @@ void	rtw_ht_use_default_setting(_adapter *padapter);
 void rtw_build_wmm_ie_ht(_adapter *padapter, u8 *out_ie, uint *pout_len);
 unsigned int rtw_restructure_ht_ie(_adapter *padapter, u8 *in_ie, u8 *out_ie, uint in_len, uint *pout_len, u8 channel);
 void rtw_update_ht_cap(_adapter *padapter, u8 *pie, uint ie_len, u8 channel);
-void rtw_issue_addbareq_cmd(_adapter *padapter, struct xmit_frame *pxmitframe);
+void rtw_issue_addbareq_cmd(_adapter *padapter, struct xmit_frame *pxmitframe, u8 issue_when_busy);
 void rtw_append_exented_cap(_adapter *padapter, u8 *out_ie, uint *pout_len);
 #endif
 
@@ -1356,8 +1368,6 @@ void dump_arp_pkt(void *sel, u8 *da, u8 *sa, u8 *arp, bool tx);
 
 #define GET_UDP_SRC(_udphdr)			BE_BITS_TO_2BYTE(((u8 *)(_udphdr)) + 0, 0, 16)
 #define GET_UDP_DST(_udphdr)			BE_BITS_TO_2BYTE(((u8 *)(_udphdr)) + 2, 0, 16)
-#define GET_UDP_SIG1(_udphdr)			BE_BITS_TO_1BYTE(((u8 *)(_udphdr)) + 8, 0, 8)
-#define GET_UDP_SIG2(_udphdr)			BE_BITS_TO_1BYTE(((u8 *)(_udphdr)) + 23, 0, 8)
 
 #define TCP_SRC(_tcphdr)				(((u8 *)(_tcphdr)) + 0)
 #define TCP_DST(_tcphdr)				(((u8 *)(_tcphdr)) + 2)

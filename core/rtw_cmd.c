@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -609,7 +609,7 @@ _next:
 				if (extra_parm && extra_parm->pbuf && extra_parm->size > 0)
 					rtw_mfree(extra_parm->pbuf, extra_parm->size);
 			}
-			#if CONFIG_DFS
+			#ifdef CONFIG_DFS
 			else if (pcmd->cmdcode == GEN_CMD_CODE(_SetChannelSwitch))
 				adapter_to_rfctl(padapter)->csa_ch = 0;
 			#endif
@@ -709,7 +709,7 @@ post_process:
 			if (extra_parm->pbuf && extra_parm->size > 0)
 				rtw_mfree(extra_parm->pbuf, extra_parm->size);
 		}
-		#if CONFIG_DFS
+		#ifdef CONFIG_DFS
 		else if (pcmd->cmdcode == GEN_CMD_CODE(_SetChannelSwitch))
 			adapter_to_rfctl(padapter)->csa_ch = 0;
 		#endif
@@ -1220,7 +1220,7 @@ static u8 rtw_createbss_cmd(_adapter  *adapter, int flags, bool adhoc
 	u8 res = _SUCCESS;
 
 	if (req_ch > 0 && req_bw >= 0 && req_offset >= 0) {
-		if (!rtw_chset_is_chbw_valid(adapter_to_chset(adapter), req_ch, req_bw, req_offset, 0, 0)) {
+		if (!rtw_chset_is_chbw_valid(adapter_to_chset(adapter), req_ch, req_bw, req_offset)) {
 			res = _FAIL;
 			goto exit;
 		}
@@ -1497,28 +1497,15 @@ u8 rtw_joinbss_cmd(_adapter  *padapter, struct wlan_network *pnetwork)
 
 #ifdef CONFIG_80211AC_VHT
 	pvhtpriv->vht_option = _FALSE;
-	if ((psecnetwork->Configuration.DSConfig <= 14) &&
-	    (!rtw_is_vht_2g4(padapter))) {
-		RTW_PRINT("%s: Not support VHT rate on 2.4G (ch:%d)\n",
-			  __FUNCTION__,
-			  psecnetwork->Configuration.DSConfig);
-		goto skip_vht;
-	}
 	if (phtpriv->ht_option
 		&& REGSTY_IS_11AC_ENABLE(pregistrypriv)
 		&& is_supported_vht(pregistrypriv->wireless_mode)
 		&& (!rfctl->country_ent || COUNTRY_CHPLAN_EN_11AC(rfctl->country_ent))
+		&& ((padapter->registrypriv.wifi_spec == 0) || (pnetwork->network.Configuration.DSConfig > 14))
 	) {
 		rtw_restructure_vht_ie(padapter, &pnetwork->network.IEs[0], &psecnetwork->IEs[0],
 			pnetwork->network.IELength, &psecnetwork->IELength);
-
-		if ((psecnetwork->Configuration.DSConfig <= 14) &&
-		    (pvhtpriv->vht_option == _TRUE))
-			RTW_INFO("%s: AP support VHT rate on 2.4G (ch:%d)\n",
-				  __FUNCTION__,
-				  psecnetwork->Configuration.DSConfig);
 	}
-skip_vht:
 #endif
 #endif /* CONFIG_80211N_HT */
 
@@ -1602,62 +1589,6 @@ exit:
 
 
 	return res;
-}
-
-
-u8 rtw_stop_ap_cmd(_adapter  *adapter, u8 flags)
-{
-#ifdef CONFIG_AP_MODE
-	struct cmd_obj *cmdobj;
-	struct drvextra_cmd_parm *parm;
-	struct cmd_priv *pcmdpriv = &adapter->cmdpriv;
-	struct submit_ctx sctx;
-	u8 res = _SUCCESS;
-
-	if (flags & RTW_CMDF_DIRECTLY) {
-		/* no need to enqueue, do the cmd hdl directly and free cmd parameter */
-		if (H2C_SUCCESS != stop_ap_hdl(adapter))
-			res = _FAIL;
-	} else {
-		parm = (struct drvextra_cmd_parm *)rtw_zmalloc(sizeof(struct drvextra_cmd_parm));
-		if (parm == NULL) {
-			res = _FAIL;
-			goto exit;
-		}
-
-		parm->ec_id = STOP_AP_WK_CID;
-		parm->type = 0;
-		parm->size = 0;
-		parm->pbuf = NULL;
-		
-		/* need enqueue, prepare cmd_obj and enqueue */
-		cmdobj = (struct cmd_obj *)rtw_zmalloc(sizeof(*cmdobj));
-		if (cmdobj == NULL) {
-			res = _FAIL;
-			goto exit;
-		}
-
-		init_h2fwcmd_w_parm_no_rsp(cmdobj, parm, GEN_CMD_CODE(_Set_Drv_Extra));
-
-		if (flags & RTW_CMDF_WAIT_ACK) {
-			cmdobj->sctx = &sctx;
-			rtw_sctx_init(&sctx, 2000);
-		}
-
-		res = rtw_enqueue_cmd(pcmdpriv, cmdobj);
-
-		if (res == _SUCCESS && (flags & RTW_CMDF_WAIT_ACK)) {
-			rtw_sctx_wait(&sctx, __func__);
-			_enter_critical_mutex(&pcmdpriv->sctx_mutex, NULL);
-			if (sctx.status == RTW_SCTX_SUBMITTED)
-				cmdobj->sctx = NULL;
-			_exit_critical_mutex(&pcmdpriv->sctx_mutex, NULL);
-		}
-	}
-
-exit:
-	return res;
-#endif
 }
 
 u8 rtw_setopmode_cmd(_adapter  *adapter, NDIS_802_11_NETWORK_INFRASTRUCTURE networktype, u8 flags)
@@ -3282,11 +3213,15 @@ void rtw_iface_dynamic_chk_wk_hdl(_adapter *padapter)
 void rtw_dynamic_chk_wk_hdl(_adapter *padapter)
 {
 	rtw_mi_dynamic_chk_wk_hdl(padapter);
-
-#ifdef DBG_CONFIG_ERROR_DETECT
-	rtw_hal_sreset_xmit_status_check(padapter);
-	rtw_hal_sreset_linked_status_check(padapter);
+#ifdef CONFIG_MP_INCLUDED
+	if (rtw_mp_mode_check(padapter) == _FALSE)
 #endif
+	{
+#ifdef DBG_CONFIG_ERROR_DETECT
+		rtw_hal_sreset_xmit_status_check(padapter);
+		rtw_hal_sreset_linked_status_check(padapter);
+#endif
+	}
 
 	/* if(check_fwstate(pmlmepriv, _FW_UNDER_LINKING|_FW_UNDER_SURVEY)==_FALSE) */
 	{
@@ -4032,7 +3967,7 @@ exit:
 
 }
 
-#if CONFIG_DFS
+#ifdef CONFIG_DFS
 void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 {
 	struct rf_ctl_t *rfctl = dvobj_to_rfctl(dvobj);
@@ -4486,12 +4421,12 @@ void rtw_dfs_rd_en_decision(_adapter *adapter, u8 mlme_act, u8 excl_ifbmp)
 	}
 
 	if (MSTATE_STA_LD_NUM(&mstate) > 0) {
-		if (rtw_chset_is_dfs_chbw(rfctl->channel_set, u_ch, u_bw, u_offset)) {
+		if (rtw_is_dfs_chbw(u_ch, u_bw, u_offset)) {
 			/*
 			* if operate as slave w/o radar detect,
 			* rely on AP on which STA mode connects
 			*/
-			if (IS_DFS_SLAVE_WITH_RD(rfctl) && !rtw_rfctl_dfs_domain_unknown(rfctl))
+			if (IS_DFS_SLAVE_WITH_RD(rfctl) && !rtw_odm_dfs_domain_unknown(dvobj))
 				needed = _TRUE;
 			ld_sta_in_dfs = _TRUE;
 		}
@@ -4503,7 +4438,7 @@ void rtw_dfs_rd_en_decision(_adapter *adapter, u8 mlme_act, u8 excl_ifbmp)
 		goto apply;
 	}
 
-	if (rtw_chset_is_dfs_chbw(rfctl->channel_set, u_ch, u_bw, u_offset))
+	if (rtw_is_dfs_chbw(u_ch, u_bw, u_offset))
 		needed = _TRUE;
 
 apply:
@@ -5118,60 +5053,38 @@ inline u8 rtw_c2h_packet_wk_cmd(_adapter *adapter, u8 *c2h_evt, u16 length)
 }
 #endif
 
-static u8 _rtw_run_in_thread_cmd(_adapter *adapter, void (*func)(void *), void *context, s32 timeout_ms)
+u8 rtw_run_in_thread_cmd(PADAPTER padapter, void (*func)(void *), void *context)
 {
-	struct cmd_priv *cmdpriv = &adapter->cmdpriv;
-	struct cmd_obj *cmdobj;
+	struct cmd_priv *pcmdpriv;
+	struct cmd_obj *ph2c;
 	struct RunInThread_param *parm;
-	struct submit_ctx sctx;
 	s32 res = _SUCCESS;
 
-	cmdobj = (struct cmd_obj *)rtw_zmalloc(sizeof(struct cmd_obj));
-	if (NULL == cmdobj) {
+
+	pcmdpriv = &padapter->cmdpriv;
+
+	ph2c = (struct cmd_obj *)rtw_zmalloc(sizeof(struct cmd_obj));
+	if (NULL == ph2c) {
 		res = _FAIL;
 		goto exit;
 	}
 
 	parm = (struct RunInThread_param *)rtw_zmalloc(sizeof(struct RunInThread_param));
 	if (NULL == parm) {
-		rtw_mfree((u8 *)cmdobj, sizeof(struct cmd_obj));
+		rtw_mfree((u8 *)ph2c, sizeof(struct cmd_obj));
 		res = _FAIL;
 		goto exit;
 	}
 
 	parm->func = func;
 	parm->context = context;
-	init_h2fwcmd_w_parm_no_rsp(cmdobj, parm, GEN_CMD_CODE(_RunInThreadCMD));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, parm, GEN_CMD_CODE(_RunInThreadCMD));
 
-	if (timeout_ms >= 0) {
-		cmdobj->sctx = &sctx;
-		rtw_sctx_init(&sctx, timeout_ms);
-	}
-
-	res = rtw_enqueue_cmd(cmdpriv, cmdobj);
-
-	if (res == _SUCCESS && timeout_ms >= 0) {
-		rtw_sctx_wait(&sctx, __func__);
-		_enter_critical_mutex(&cmdpriv->sctx_mutex, NULL);
-		if (sctx.status == RTW_SCTX_SUBMITTED)
-			cmdobj->sctx = NULL;
-		_exit_critical_mutex(&cmdpriv->sctx_mutex, NULL);
-		if (sctx.status != RTW_SCTX_DONE_SUCCESS)
-			res = _FAIL;
-	}
-
+	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 exit:
+
+
 	return res;
-}
-
-u8 rtw_run_in_thread_cmd(_adapter *adapter, void (*func)(void *), void *context)
-{
-	return _rtw_run_in_thread_cmd(adapter, func, context, -1);
-}
-
-u8 rtw_run_in_thread_cmd_wait(_adapter *adapter, void (*func)(void *), void *context, s32 timeout_ms)
-{
-	return _rtw_run_in_thread_cmd(adapter, func, context, timeout_ms);
 }
 
 #ifdef CONFIG_FW_C2H_REG
@@ -5542,41 +5455,6 @@ exit:
 }
 #endif
 
-
-void rtw_ac_parm_cmd_hdl(_adapter *padapter, u8 *_ac_parm_buf, int ac_type)
-{
-
-	u32 ac_parm_buf;
-
-	_rtw_memcpy(&ac_parm_buf, _ac_parm_buf, sizeof(ac_parm_buf));
-	switch (ac_type) {
-	case XMIT_VO_QUEUE:
-		RTW_INFO(FUNC_NDEV_FMT" AC_VO = 0x%08x\n", FUNC_ADPT_ARG(padapter), (unsigned int) ac_parm_buf);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VO, (u8 *)(&ac_parm_buf));
-		break;
-
-	case XMIT_VI_QUEUE:
-		RTW_INFO(FUNC_NDEV_FMT" AC_VI = 0x%08x\n", FUNC_ADPT_ARG(padapter), (unsigned int) ac_parm_buf);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VI, (u8 *)(&ac_parm_buf));
-		break;
-
-	case XMIT_BE_QUEUE:
-		RTW_INFO(FUNC_NDEV_FMT" AC_BE = 0x%08x\n", FUNC_ADPT_ARG(padapter), (unsigned int) ac_parm_buf);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BE, (u8 *)(&ac_parm_buf));
-		break;
-
-	case XMIT_BK_QUEUE:
-		RTW_INFO(FUNC_NDEV_FMT" AC_BK = 0x%08x\n", FUNC_ADPT_ARG(padapter), (unsigned int) ac_parm_buf);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BK, (u8 *)(&ac_parm_buf));
-		break;
-
-	default:
-		break;
-	}
-
-}
-
-
 u8 rtw_drvextra_cmd_hdl(_adapter *padapter, unsigned char *pbuf)
 {
 	int ret = H2C_SUCCESS;
@@ -5741,14 +5619,7 @@ u8 rtw_drvextra_cmd_hdl(_adapter *padapter, unsigned char *pbuf)
 		rtw_ctrl_txss_wk_hdl(padapter, (struct txss_cmd_parm *)pdrvextra_cmd->pbuf);
 		break;
 #endif
-	case AC_PARM_CMD_WK_CID:
-		rtw_ac_parm_cmd_hdl(padapter, pdrvextra_cmd->pbuf, pdrvextra_cmd->type);
-		break;
-#ifdef CONFIG_AP_MODE
-	case STOP_AP_WK_CID:
-		stop_ap_hdl(padapter);
-		break;
-#endif
+
 	default:
 		break;
 	}
@@ -5939,50 +5810,4 @@ void rtw_getrttbl_cmd_cmdrsp_callback(_adapter	*padapter,  struct cmd_obj *pcmd)
 #endif
 
 
-}
-
-u8 set_txq_params_cmd(_adapter *adapter, u32 ac_parm, u8 ac_type)
-{
-	struct cmd_obj *cmdobj;
-	struct drvextra_cmd_parm *pdrvextra_cmd_parm;
-	struct cmd_priv *pcmdpriv = &adapter->cmdpriv;
-	u8 *ac_parm_buf = NULL;
-	u8 sz;
-	u8 res = _SUCCESS;
-
-
-	cmdobj = (struct cmd_obj *)rtw_zmalloc(sizeof(struct cmd_obj));
-	if (cmdobj == NULL) {
-		res = _FAIL;
-		goto exit;
-	}
-
-	pdrvextra_cmd_parm = (struct drvextra_cmd_parm *)rtw_zmalloc(sizeof(struct drvextra_cmd_parm));
-	if (pdrvextra_cmd_parm == NULL) {
-		rtw_mfree((u8 *)cmdobj, sizeof(struct cmd_obj));
-		res = _FAIL;
-		goto exit;
-	}
-
-	sz = sizeof(ac_parm);
-	ac_parm_buf = rtw_zmalloc(sz);
-	if (ac_parm_buf == NULL) {
-		rtw_mfree((u8 *)cmdobj, sizeof(struct cmd_obj));
-		rtw_mfree((u8 *)pdrvextra_cmd_parm, sizeof(struct drvextra_cmd_parm));
-		res = _FAIL;
-		goto exit;
-	}
-
-	pdrvextra_cmd_parm->ec_id = AC_PARM_CMD_WK_CID;
-	pdrvextra_cmd_parm->type = ac_type;
-	pdrvextra_cmd_parm->size = sz;
-	pdrvextra_cmd_parm->pbuf = ac_parm_buf;
-
-	_rtw_memcpy(ac_parm_buf, &ac_parm, sz);
-
-	init_h2fwcmd_w_parm_no_rsp(cmdobj, pdrvextra_cmd_parm, GEN_CMD_CODE(_Set_Drv_Extra));
-	res = rtw_enqueue_cmd(pcmdpriv, cmdobj);
-
-exit:
-	return res;
 }

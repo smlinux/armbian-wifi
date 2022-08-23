@@ -82,6 +82,8 @@ void rtw_odm_get_perpkt_rssi(void *sel, _adapter *adapter);
 void rtw_odm_acquirespinlock(_adapter *adapter,	enum rt_spinlock_type type);
 void rtw_odm_releasespinlock(_adapter *adapter,	enum rt_spinlock_type type);
 
+u8 rtw_odm_get_dfs_domain(struct dvobj_priv *dvobj);
+u8 rtw_odm_dfs_domain_unknown(struct dvobj_priv *dvobj);
 #ifdef CONFIG_DFS_MASTER
 void rtw_odm_radar_detect_reset(_adapter *adapter);
 void rtw_odm_radar_detect_disable(_adapter *adapter);

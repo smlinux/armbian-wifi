@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -225,9 +225,6 @@ struct registry_priv {
 #ifdef CONFIG_TX_EARLY_MODE
 	u8   early_mode;
 #endif
-#ifdef CONFIG_NARROWBAND_SUPPORTING
-	u8	rtw_nb_config;
-#endif
 	u8	acm_method;
 	/* WMM */
 	u8	wmm_enable;
@@ -259,6 +256,7 @@ struct registry_priv {
 	u8	rx_stbc;
 	u8	rx_ampdu_amsdu;/* Rx A-MPDU Supports A-MSDU is permitted */
 	u8	tx_ampdu_amsdu;/* Tx A-MPDU Supports A-MSDU is permitted */
+	u8	tx_quick_addba_req;
 	u8 rx_ampdu_sz_limit_by_nss_bw[4][4]; /* 1~4SS, BW20~BW160 */
 	/* Short GI support Bit Map */
 	/* BIT0 - 20MHz, 1: support, 0: non-support */
@@ -270,12 +268,6 @@ struct registry_priv {
 	u8	ldpc_cap;
 	/* BIT0: Enable VHT STBC Rx, BIT1: Enable VHT STBC Tx, BIT4: Enable HT STBC Rx, BIT5: Enable HT STBC Tx */
 	u8	stbc_cap;
-	#if defined(CONFIG_RTW_TX_NPATH_EN)
-	u8	tx_npath;
-	#endif
-	#if defined(CONFIG_RTW_PATH_DIV)
-	u8 path_div;
-	#endif
 	/*
 	 * BIT0: Enable VHT SU Beamformer
 	 * BIT1: Enable VHT SU Beamformee
@@ -297,14 +289,11 @@ struct registry_priv {
 
 	u8	lowrate_two_xmit;
 
+	u8	rf_config ;
 	u8	low_power ;
 
 	u8	wifi_spec;/* !turbo_mode */
-
-	u8 rf_path; /*rf_config*/
-	u8 tx_nss;
-	u8 rx_nss;
-
+	u8	special_rf_path; /* 0: 2T2R ,1: only turn on path A 1T1R */
 	char alpha2[2];
 	u8	channel_plan;
 	u8	excl_chs[MAX_CHANNEL_NUM];
@@ -364,7 +353,7 @@ struct registry_priv {
 
 	u8 target_tx_pwr_valid;
 	s8 target_tx_pwr_2g[RF_PATH_MAX][RATE_SECTION_NUM];
-#if CONFIG_IEEE80211_BAND_5GHZ
+#ifdef CONFIG_IEEE80211_BAND_5GHZ
 	s8 target_tx_pwr_5g[RF_PATH_MAX][RATE_SECTION_NUM - 1];
 #endif
 
@@ -388,9 +377,6 @@ struct registry_priv {
 #endif
 #ifdef CONFIG_CONCURRENT_MODE
 	u8 virtual_iface_num;
-#ifdef CONFIG_P2P
-	u8 sel_p2p_iface;
-#endif
 #endif
 	u8 qos_opt_enable;
 
@@ -455,11 +441,7 @@ struct registry_priv {
 #endif
 	u8 check_hw_status;
 	u8 wowlan_sta_mix_mode;
-
-#ifdef CONFIG_PCI_HCI
 	u32 pci_aspm_config;
-	u32 pci_dynamic_aspm_linkctrl;
-#endif
 
 	u8 iqk_fw_offload;
 	u8 ch_switch_offload;
@@ -500,12 +482,9 @@ struct registry_priv {
 	u8 peer_alive_based_preq;
 #endif
 
-	/*
-	 * vht_2g4: use VHT rate on 2.4G or not
-	 * 0: deny
-	 * 1: allow
-	 */
-	u8 vht_2g4;
+#ifdef CONFIG_RTL8822C_XCAP_NEW_POLICY
+	u8 rtw_8822c_xcap_overwrite;
+#endif
 };
 
 /* For registry parameters */
@@ -542,10 +521,6 @@ struct registry_priv {
 #define REGSTY_IS_11AC_ENABLE(regsty) ((regsty)->vht_enable != 0)
 #define REGSTY_IS_11AC_AUTO(regsty) ((regsty)->vht_enable == 2)
 
-#define rtw_is_vht_2g4(adapter)		((adapter)->registrypriv.vht_2g4 != 0)
-#define rtw_set_vht_2g4(adapter, enable) \
-			((adapter)->registrypriv.vht_2g4 = (enable ? 1 : 0))
-
 typedef struct rtw_if_operations {
 	int __must_check (*read)(struct dvobj_priv *d, unsigned int addr, void *buf,
 				size_t len, bool fixed);
@@ -564,14 +539,14 @@ typedef struct rtw_if_operations {
 	#include <drv_types_pci.h>
 #endif
 
-#define get_hw_port(adapter) (adapter->hw_port)
-
 #ifdef CONFIG_CONCURRENT_MODE
 	#define is_primary_adapter(adapter) (adapter->adapter_type == PRIMARY_ADAPTER)
 	#define is_vir_adapter(adapter) (adapter->adapter_type == VIRTUAL_ADAPTER)
+	#define get_hw_port(adapter) (adapter->hw_port)
 #else
 	#define is_primary_adapter(adapter) (1)
 	#define is_vir_adapter(adapter) (0)
+	#define get_hw_port(adapter) (HW_PORT0)
 #endif
 #define GET_PRIMARY_ADAPTER(padapter) (((_adapter *)padapter)->dvobj->padapters[IFACE_ID0])
 #define GET_IFACE_NUMS(padapter) (((_adapter *)padapter)->dvobj->iface_nums)
@@ -856,10 +831,6 @@ struct macid_ctl_t {
 	struct sta_info *sta[MACID_NUM_SW_LIMIT]; /* corresponding stainfo when macid is not shared */
 
 	/* macid sleep registers */
-#ifdef CONFIG_PROTSEL_MACSLEEP
-	u16 reg_sleep_ctrl;
-	u16 reg_sleep_info;
-#else
 	u16 reg_sleep_m0;
 #if (MACID_NUM_SW_LIMIT > 32)
 	u16 reg_sleep_m1;
@@ -869,7 +840,6 @@ struct macid_ctl_t {
 #endif
 #if (MACID_NUM_SW_LIMIT > 96)
 	u16 reg_sleep_m3;
-#endif
 #endif
 };
 
@@ -896,18 +866,15 @@ struct macid_ctl_t {
 #define RATE_BMP_GET_HT_4SS(_bmp_ht)		((_bmp_ht & RATE_BMP_HT_4SS) >> 24)
 
 /* used for rf_ctl_t.rate_bmp_vht_by_bw */
-#define RATE_BMP_VHT_1SS	0x00000003FF
-#define RATE_BMP_VHT_2SS	0x00000FFC00
-#define RATE_BMP_VHT_3SS	0x003FF00000
-#define RATE_BMP_VHT_4SS	0xFFC0000000
+#define RATE_BMP_VHT_1SS	0x000003FF
+#define RATE_BMP_VHT_2SS	0x000FFC00
+#define RATE_BMP_VHT_3SS	0x3FF00000
 #define RATE_BMP_HAS_VHT_1SS(_bmp_vht)		(_bmp_vht & RATE_BMP_VHT_1SS)
 #define RATE_BMP_HAS_VHT_2SS(_bmp_vht)		(_bmp_vht & RATE_BMP_VHT_2SS)
 #define RATE_BMP_HAS_VHT_3SS(_bmp_vht)		(_bmp_vht & RATE_BMP_VHT_3SS)
-#define RATE_BMP_HAS_VHT_4SS(_bmp_vht)		(_bmp_vht & RATE_BMP_VHT_4SS)
-#define RATE_BMP_GET_VHT_1SS(_bmp_vht)		((u16)(_bmp_vht & RATE_BMP_VHT_1SS))
-#define RATE_BMP_GET_VHT_2SS(_bmp_vht)		((u16)((_bmp_vht & RATE_BMP_VHT_2SS) >> 10))
-#define RATE_BMP_GET_VHT_3SS(_bmp_vht)		((u16)((_bmp_vht & RATE_BMP_VHT_3SS) >> 20))
-#define RATE_BMP_GET_VHT_4SS(_bmp_vht)		((u16)((_bmp_vht & RATE_BMP_VHT_4SS) >> 30))
+#define RATE_BMP_GET_VHT_1SS(_bmp_vht)		(_bmp_vht & RATE_BMP_VHT_1SS)
+#define RATE_BMP_GET_VHT_2SS(_bmp_vht)		((_bmp_vht & RATE_BMP_VHT_2SS) >> 10)
+#define RATE_BMP_GET_VHT_3SS(_bmp_vht)		((_bmp_vht & RATE_BMP_VHT_3SS) >> 20)
 
 #define TXPWR_LMT_REF_VHT_FROM_HT	BIT0
 #define TXPWR_LMT_REF_HT_FROM_VHT	BIT1
@@ -939,12 +906,13 @@ struct rf_ctl_t {
 	/* used for debug or by tx power limit */
 	u16 rate_bmp_cck_ofdm;		/* 20MHz */
 	u32 rate_bmp_ht_by_bw[2];	/* 20MHz, 40MHz. 4SS supported */
-	u64 rate_bmp_vht_by_bw[4];	/* 20MHz, 40MHz, 80MHz, 160MHz. 4SS supported */
+	u32 rate_bmp_vht_by_bw[4];	/* 20MHz, 40MHz, 80MHz, 160MHz. up to 3SS supported */
 
-#if CONFIG_TXPWR_LIMIT
+	/* used by tx power limit */
 	u8 highest_ht_rate_bw_bmp;
 	u8 highest_vht_rate_bw_bmp;
 
+#if CONFIG_TXPWR_LIMIT
 	_mutex txpwr_lmt_mutex;
 	_list reg_exc_list;
 	u8 regd_exc_num;
@@ -953,19 +921,18 @@ struct rf_ctl_t {
 	const char *regd_name;
 
 	u8 txpwr_lmt_2g_cck_ofdm_state;
-	#if CONFIG_IEEE80211_BAND_5GHZ
+	#ifdef CONFIG_IEEE80211_BAND_5GHZ
 	u8 txpwr_lmt_5g_cck_ofdm_state;
 	u8 txpwr_lmt_5g_20_40_ref;
 	#endif
 #endif
 
-	bool ch_sel_within_same_band;
+	u8 ch_sel_same_band_prefer;
 
-#if CONFIG_DFS
+#ifdef CONFIG_DFS
 	u8 csa_ch;
 
 #ifdef CONFIG_DFS_MASTER
-	u8 dfs_region_domain;
 	_timer radar_detect_timer;
 	bool radar_detect_by_others;
 	u8 radar_detect_enabled;
@@ -979,7 +946,7 @@ struct rf_ctl_t {
 	systime cac_end_time;
 	u8 cac_force_stop;
 
-#if CONFIG_DFS_SLAVE_WITH_RADAR_DETECT
+#ifdef CONFIG_DFS_SLAVE_WITH_RADAR_DETECT
 	u8 dfs_slave_with_rd;
 #endif
 	u8 dfs_ch_sel_d_flags;
@@ -1004,7 +971,7 @@ struct rf_ctl_t {
 #define IS_RADAR_DETECTED(rfctl) 0
 #endif /* CONFIG_DFS_MASTER */
 
-#if CONFIG_DFS_SLAVE_WITH_RADAR_DETECT
+#ifdef CONFIG_DFS_SLAVE_WITH_RADAR_DETECT
 #define IS_DFS_SLAVE_WITH_RD(rfctl) ((rfctl)->dfs_slave_with_rd)
 #else
 #define IS_DFS_SLAVE_WITH_RD(rfctl) 0
@@ -1061,24 +1028,6 @@ struct tsf_info {
 	u8 sync_port;/*port_x's tsf sync to port_0*/
 	u8 offset; /*tsf timer offset*/
 };
-#endif
-
-struct protsel {
-	_mutex mutex;		/* protect this structure */
-	ATOMIC_T refcnt;	/* reference count */
-	u32 sel;		/* save the last sel port */
-};
-
-#ifdef CONFIG_RTL8814B
-#define MAX_BULKOUT_NUM 7
-#ifdef CONFIG_USB_HCI
-#define MAX_ENDPOINT_NUM 8
-#endif
-#else
-#define MAX_BULKOUT_NUM 4
-#ifdef CONFIG_USB_HCI
-#define MAX_ENDPOINT_NUM 6
-#endif
 #endif
 
 struct dvobj_priv {
@@ -1166,9 +1115,13 @@ struct dvobj_priv {
 	struct tx_aclt_conf_t tx_aclt_confs[TX_ACLT_CONF_NUM];
 #endif
 
+	/* For 92D, DMDP have 2 interface. */
+	u8	InterfaceNumber;
+	u8	NumInterfaces;
+
 	/* In /Out Pipe information */
 	int	RtInPipe[2];
-	int	RtOutPipe[MAX_BULKOUT_NUM];
+	int	RtOutPipe[4];
 	u8	Queue2Pipe[HW_QUEUE_ENTRY];/* for out pipe mapping */
 
 	u8	irq_alloc;
@@ -1231,7 +1184,7 @@ struct dvobj_priv {
 	u8	nr_endpoint;
 	u8	RtNumInPipes;
 	u8	RtNumOutPipes;
-	int	ep_num[MAX_ENDPOINT_NUM]; /* endpoint number */
+	int	ep_num[6]; /* endpoint number */
 
 	int	RegUsbSS;
 
@@ -1292,6 +1245,17 @@ struct dvobj_priv {
 	RT_ISR_CONTENT	isr_content;
 	_lock	irq_th_lock;
 
+	/* ASPM */
+	u8	const_pci_aspm;
+	u8	const_amdpci_aspm;
+	u8	const_hwsw_rfoff_d3;
+	u8	const_support_pciaspm;
+	/* pci-e bridge */
+	u8	const_hostpci_aspm_setting;
+	/* pci-e device */
+	u8	const_devicepci_aspm_setting;
+	u8	b_support_aspm; /* If it supports ASPM, Offset[560h] = 0x40, otherwise Offset[560h] = 0x00. */
+	u8	b_support_backdoor;
 	u8	bdma64;
 #endif/* PLATFORM_LINUX */
 
@@ -1309,16 +1273,6 @@ struct dvobj_priv {
 	/* also for RTK T/P Testing Mode */ 
 	u8 scan_deny;
 
-	/* protect sel to safely access */
-#ifdef CONFIG_PROTSEL_PORT
-	struct protsel protsel_port;
-#endif
-#ifdef CONFIG_PROTSEL_ATIMDTIM
-	struct protsel protsel_atimdtim;
-#endif
-#ifdef CONFIG_PROTSEL_MACSLEEP
-	struct protsel protsel_macsleep;
-#endif
 };
 
 #define DEV_STA_NUM(_dvobj)			MSTATE_STA_NUM(&((_dvobj)->iface_state))

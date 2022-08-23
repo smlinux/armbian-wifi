@@ -680,38 +680,22 @@ struct btc_wifi_link_info halbtcoutsrc_getwifilinkinfo(PBTC_COEXIST pBtCoexist)
 			if (band_sta == band_p2p) {
 				switch (band_sta) {
 				case BAND_ON_2_4G:
-					if (MLME_IS_GO(p2p_iface)) {
-						#ifdef CONFIG_MCC_MODE
+					if (MLME_IS_GO(p2p_iface))
 						wifi_link_info.link_mode =
 							mcc_en == _TRUE ?  BTC_LINK_2G_MCC_GO_STA : BTC_LINK_2G_SCC_GO_STA;
-						#else /* !CONFIG_MCC_MODE */
-							wifi_link_info.link_mode = BTC_LINK_2G_SCC_GO_STA;
-						#endif /* CONFIG_MCC_MODE */
-					} else if (MLME_IS_GC(p2p_iface)) {
-						#ifdef CONFIG_MCC_MODE
+					else if (MLME_IS_GC(p2p_iface))
 						wifi_link_info.link_mode =
 							mcc_en == _TRUE ?  BTC_LINK_2G_MCC_GC_STA : BTC_LINK_2G_SCC_GC_STA;
-						#else /* !CONFIG_MCC_MODE */
-							wifi_link_info.link_mode = BTC_LINK_2G_SCC_GC_STA;
-						#endif /* CONFIG_MCC_MODE */
-					}
 					break;
 				case BAND_ON_5G:
-					if (MLME_IS_GO(p2p_iface)) {
-						#ifdef CONFIG_MCC_MODE
+					if (MLME_IS_GO(p2p_iface))
 						wifi_link_info.link_mode =
 							mcc_en == _TRUE ?  BTC_LINK_5G_MCC_GO_STA : BTC_LINK_5G_SCC_GO_STA;
-						#else /* !CONFIG_MCC_MODE */
-							wifi_link_info.link_mode = BTC_LINK_5G_SCC_GO_STA;
-						#endif /* CONFIG_MCC_MODE */
-					} else if (MLME_IS_GC(p2p_iface)) {
-						#ifdef CONFIG_MCC_MODE
+					else if (MLME_IS_GC(p2p_iface))
 						wifi_link_info.link_mode =
 							mcc_en == _TRUE ?  BTC_LINK_5G_MCC_GC_STA : BTC_LINK_5G_SCC_GC_STA;
-						#else /* !CONFIG_MCC_MODE */
-							wifi_link_info.link_mode = BTC_LINK_5G_SCC_GC_STA;
-						#endif /* CONFIG_MCC_MODE */
-					}
+					break;
+				default:
 					break;
 				}
 			} else {
@@ -1276,7 +1260,6 @@ u8 halbtcoutsrc_Get(void *pBtcContext, u8 getType, void *pOutBuf)
 		break;
 
 	case BTC_GET_U4_BT_FORBIDDEN_SLOT_VAL:
-	case BTC_GET_U4_BT_A2DP_FLUSH_VAL:
 		*pU4Tmp = halbtcoutsrc_GetBtForbiddenSlotVal(pBtCoexist);
 		break;
 
@@ -1620,24 +1603,18 @@ u8 halbtcoutsrc_Set(void *pBtcContext, u8 setType, void *pInBuf)
 		case BTC_CHIP_RTL8822B:
 			_rtw_memset(&pBtCoexist->coex_dm_8822b_1ant, 0x00, sizeof(pBtCoexist->coex_dm_8822b_1ant));
 			_rtw_memset(&pBtCoexist->coex_dm_8822b_2ant, 0x00, sizeof(pBtCoexist->coex_dm_8822b_2ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8822b_1ant, 0x00, sizeof(pBtCoexist->coex_sta_8822b_1ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8822b_2ant, 0x00, sizeof(pBtCoexist->coex_sta_8822b_2ant));
 			break;
 #endif
 #ifdef CONFIG_RTL8821C
 		case BTC_CHIP_RTL8821C:
 			_rtw_memset(&pBtCoexist->coex_dm_8821c_1ant, 0x00, sizeof(pBtCoexist->coex_dm_8821c_1ant));
 			_rtw_memset(&pBtCoexist->coex_dm_8821c_2ant, 0x00, sizeof(pBtCoexist->coex_dm_8821c_2ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8821c_1ant, 0x00, sizeof(pBtCoexist->coex_sta_8821c_1ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8821c_2ant, 0x00, sizeof(pBtCoexist->coex_sta_8821c_2ant));
 			break;
 #endif
 #ifdef CONFIG_RTL8723D
 		case BTC_CHIP_RTL8723D:
 			_rtw_memset(&pBtCoexist->coex_dm_8723d_1ant, 0x00, sizeof(pBtCoexist->coex_dm_8723d_1ant));
 			_rtw_memset(&pBtCoexist->coex_dm_8723d_2ant, 0x00, sizeof(pBtCoexist->coex_dm_8723d_2ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8723d_1ant, 0x00, sizeof(pBtCoexist->coex_sta_8723d_1ant));
-			_rtw_memset(&pBtCoexist->coex_sta_8723d_2ant, 0x00, sizeof(pBtCoexist->coex_sta_8723d_2ant));
 			break;
 #endif
 		}
@@ -2556,27 +2533,12 @@ void halbtcoutsrc_FillH2cCmd(void *pBtcContext, u8 elementId, u32 cmdLen, u8 *pC
 {
 	PBTC_COEXIST pBtCoexist;
 	PADAPTER padapter;
-	s32 ret = 0;
 
 
 	pBtCoexist = (PBTC_COEXIST)pBtcContext;
 	padapter = pBtCoexist->Adapter;
 
-	ret = rtw_hal_fill_h2c_cmd(padapter, elementId, cmdLen, pCmdBuffer);
-
-#ifdef CONFIG_RTL8192F
-	if (ret == _SUCCESS) {
-		switch (elementId) {
-		case H2C_BT_INFO:
-		case H2C_BT_IGNORE_WLANACT:
-		case H2C_WL_OPMODE:
-		case H2C_BT_MP_OPER:
-		case H2C_BT_CONTROL:
-			rtw_msleep_os(20);
-			break;
-		}
-	}
-#endif
+	rtw_hal_fill_h2c_cmd(padapter, elementId, cmdLen, pCmdBuffer);
 }
 
 static void halbtcoutsrc_coex_offload_init(void)
@@ -3042,7 +3004,7 @@ u8 EXhalbtcoutsrc_BindBtCoexWithAdapter(void *padapter)
 #ifdef CONFIG_RTL8192F
 	else if (IS_HARDWARE_TYPE_8192F(padapter)) {
 		pBtCoexist->chip_type = BTC_CHIP_RTL8725A;
-		pBtCoexist->chip_para = &btc_chip_para_8192f;
+		pBtCoexist->chip_para = &btc_chip_para_8725a;
 	}
 #endif
 	else {

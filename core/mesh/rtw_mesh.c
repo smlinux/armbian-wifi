@@ -999,7 +999,6 @@ u8 rtw_mesh_select_operating_ch(_adapter *adapter)
 			int ch_set_idx = rtw_chset_search_ch(rfctl->channel_set, scanned->network.Configuration.DSConfig);
 
 			if (ch_set_idx >= 0
-				&& rfctl->channel_set[ch_set_idx].ScanType != SCAN_PASSIVE
 				&& !CH_IS_NON_OCP(&rfctl->channel_set[ch_set_idx])
 			) {
 				u8 nop, accept;

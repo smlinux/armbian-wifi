@@ -83,7 +83,6 @@ enum _EFUSE_DEF_TYPE {
 #define GET_MASK_ARRAY_LEN(ic, txt) (GET_MASK_ARRAY_LEN_MP(ic, txt))
 #define GET_MASK_ARRAY(ic, txt, out) do { GET_MASK_ARRAY_MP(ic, txt, out); } while (0)
 
-#ifdef CONFIG_BT_EFUSE_MASK
 #define IS_BT_MASKED_MP(ic, txt, offset) (EFUSE_IsBTAddressMasked_MP_##ic##txt(offset))
 #define GET_BT_MASK_ARRAY_LEN_MP(ic, txt) (EFUSE_GetBTArrayLen_MP_##ic##txt())
 #define GET_BT_MASK_ARRAY_LEN_TC(ic, txt) (EFUSE_GetBTArrayLen_TC_##ic##txt())
@@ -92,7 +91,6 @@ enum _EFUSE_DEF_TYPE {
 #define IS_BT_MASKED(ic, txt, offset) (IS_BT_MASKED_MP(ic,txt, offset))
 #define GET_BT_MASK_ARRAY(ic, txt, out) do { GET_BT_MASK_ARRAY_MP(ic,txt, out); } while(0)
 #define GET_BT_MASK_ARRAY_LEN(ic, txt) (GET_BT_MASK_ARRAY_LEN_MP(ic,txt))
-#endif
 
 /* *********************************************
  *	The following is for BT Efuse definition

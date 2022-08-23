@@ -3107,6 +3107,7 @@ void p2p_concurrent_handler(_adapter	*padapter)
 {
 	struct wifidirect_info	*pwdinfo = &padapter->wdinfo;
 	struct mlme_ext_priv	*pmlmeext = &(padapter->mlmeextpriv);
+	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 	u8					val8;
 
 #ifdef CONFIG_IOCTL_CFG80211
@@ -4432,10 +4433,8 @@ void process_p2p_ps_ie(PADAPTER padapter, u8 *IEs, u32 IELength)
 			    (noa_index != pwdinfo->noa_index)) { /* if index change, driver should reconfigure related setting. */
 				pwdinfo->noa_index = noa_index;
 				pwdinfo->opp_ps = noa_attr[1] >> 7;
-				if (pwdinfo->opp_ps != 1)
-					pwdinfo->ctwindow = 0;
-				else
-					pwdinfo->ctwindow = noa_attr[1] & 0x7F;
+				pwdinfo->ctwindow = noa_attr[1] & 0x7F;
+
 				noa_offset = 2;
 				noa_num = 0;
 				/* NoA length should be n*(13) + 2 */
@@ -4499,19 +4498,17 @@ void p2p_ps_wk_hdl(_adapter *padapter, u8 p2p_ps_state)
 
 		rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_P2P_PS_OFFLOAD, (u8 *)(&p2p_ps_state));
 
-		if (pwdinfo->opp_ps == 1) {
-			if (pwrpriv->smart_ps == 0) {
-				pwrpriv->smart_ps = 2;
-				if (pwrpriv->pwr_mode != PS_MODE_ACTIVE)
-					rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&(pwrpriv->pwr_mode)));
-			}
-		}
 		pwdinfo->noa_index = 0;
 		pwdinfo->ctwindow = 0;
 		pwdinfo->opp_ps = 0;
 		pwdinfo->noa_num = 0;
 		pwdinfo->p2p_ps_mode = P2P_PS_NONE;
-
+		if (pwrpriv->bFwCurrentInPSMode == _TRUE) {
+			if (pwrpriv->smart_ps == 0) {
+				pwrpriv->smart_ps = 2;
+				rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&(pwrpriv->pwr_mode)));
+			}
+		}
 		break;
 	case P2P_PS_ENABLE:
 		_enter_pwrlock(&adapter_to_pwrctl(padapter)->lock);
@@ -4540,8 +4537,7 @@ void p2p_ps_wk_hdl(_adapter *padapter, u8 p2p_ps_state)
 				if (pwrpriv->smart_ps != 0) {
 					pwrpriv->smart_ps = 0;
 					RTW_INFO("%s(): Enter CTW, change SmartPS\n", __FUNCTION__);
-					if (pwrpriv->pwr_mode != PS_MODE_ACTIVE)
-						rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&(pwrpriv->pwr_mode)));
+					rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_PWRMODE, (u8 *)(&(pwrpriv->pwr_mode)));
 				}
 			}
 			rtw_hal_set_hwreg(padapter, HW_VAR_H2C_FW_P2P_PS_OFFLOAD, (u8 *)(&p2p_ps_state));
@@ -5296,12 +5292,9 @@ int rtw_p2p_enable(_adapter *padapter, enum P2P_ROLE role)
 		/*	So, this function will do nothing if the buddy adapter had enabled the P2P function. */
 		/*if(!rtw_p2p_chk_state(pbuddy_wdinfo, P2P_STATE_NONE))
 			return ret;*/
-		/* Only selected interface can be P2P interface */
-		if (padapter->iface_id != padapter->registrypriv.sel_p2p_iface) {
-			RTW_ERR("%s, iface_id:%d is not P2P interface!\n", __func__, padapter->iface_id);
-			ret = _FAIL;
+		/*The buddy adapter had enabled the P2P function.*/
+		if (rtw_mi_buddy_stay_in_p2p_mode(padapter))
 			return ret;
-		}
 #endif /* CONFIG_CONCURRENT_MODE */
 
 		/* leave IPS/Autosuspend */

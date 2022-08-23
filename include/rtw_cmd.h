@@ -20,7 +20,7 @@
 
 #define FREE_CMDOBJ_SZ	128
 
-#define MAX_CMDSZ	1536
+#define MAX_CMDSZ	1024
 #define MAX_RSPSZ	512
 #define MAX_EVTSZ	1024
 
@@ -254,10 +254,6 @@ enum rtw_drvextra_cmd_id {
 #ifdef CONFIG_CTRL_TXSS_BY_TP
 	TXSS_WK_CID,
 #endif
-	AC_PARM_CMD_WK_CID,
-#ifdef CONFIG_AP_MODE
-	STOP_AP_WK_CID,
-#endif
 	MAX_WK_CID
 };
 
@@ -394,8 +390,6 @@ struct sitesurvey_parm {
 	u16 duration;	/* 0: use default, otherwise: channel scan time */
 	u8 igi;		/* 0: use defalut */
 	u8 bw;		/* 0: use default */
-
-	bool acs; /* aim to trigger channel selection when scan done */
 };
 
 /*
@@ -1013,7 +1007,6 @@ u8 rtw_create_ibss_cmd(_adapter *adapter, int flags);
 u8 rtw_startbss_cmd(_adapter *adapter, int flags);
 
 #define REQ_CH_NONE		-1
-#define REQ_CH_INT_INFO	-2
 #define REQ_BW_NONE		-1
 #define REQ_BW_ORI		-2
 #define REQ_OFFSET_NONE	-1
@@ -1029,9 +1022,6 @@ extern u8 rtw_clearstakey_cmd(_adapter *padapter, struct sta_info *sta, u8 enque
 
 extern u8 rtw_joinbss_cmd(_adapter  *padapter, struct wlan_network *pnetwork);
 u8 rtw_disassoc_cmd(_adapter *padapter, u32 deauth_timeout_ms, int flags);
-#ifdef CONFIG_AP_MODE
-u8 rtw_stop_ap_cmd(_adapter *adapter, u8 flags);
-#endif
 extern u8 rtw_setopmode_cmd(_adapter  *padapter, NDIS_802_11_NETWORK_INFRASTRUCTURE networktype, u8 flags);
 extern u8 rtw_setdatarate_cmd(_adapter  *padapter, u8 *rateset);
 extern u8 rtw_setbasicrate_cmd(_adapter  *padapter, u8 *rateset);
@@ -1076,7 +1066,7 @@ u8 rtw_dm_ra_mask_wk_cmd(_adapter *padapter, u8 *psta);
 
 extern u8 rtw_ps_cmd(_adapter *padapter);
 
-#if CONFIG_DFS
+#ifdef CONFIG_DFS
 void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj);
 #endif
 
@@ -1129,8 +1119,7 @@ u8 rtw_c2h_packet_wk_cmd(_adapter *adapter, u8 *c2h_evt, u16 length);
 u8 rtw_rson_scan_wk_cmd(_adapter *adapter, int op);
 #endif
 
-u8 rtw_run_in_thread_cmd(_adapter *adapter, void (*func)(void *), void *context);
-u8 rtw_run_in_thread_cmd_wait(_adapter *adapter, void (*func)(void *), void *context, s32 timeout_ms);
+u8 rtw_run_in_thread_cmd(PADAPTER padapter, void (*func)(void *), void *context);
 
 struct ssmps_cmd_parm {
 	struct sta_info *sta;
@@ -1141,8 +1130,6 @@ u8 rtw_ssmps_wk_cmd(_adapter *adapter, struct sta_info *sta, u8 smps, u8 enqueue
 u8 session_tracker_chk_cmd(_adapter *adapter, struct sta_info *sta);
 u8 session_tracker_add_cmd(_adapter *adapter, struct sta_info *sta, u8 *local_naddr, u8 *local_port, u8 *remote_naddr, u8 *remote_port);
 u8 session_tracker_del_cmd(_adapter *adapter, struct sta_info *sta, u8 *local_naddr, u8 *local_port, u8 *remote_naddr, u8 *remote_port);
-
-u8 set_txq_params_cmd(_adapter *adapter, u32 ac_parm, u8 ac_type);
 
 #if defined(CONFIG_RTW_MESH) && defined(RTW_PER_CMD_SUPPORT_FW)
 u8 rtw_req_per_cmd(_adapter * adapter);

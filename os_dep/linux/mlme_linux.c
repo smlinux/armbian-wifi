@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -54,20 +54,16 @@ void Linkdown_workitem_callback(struct work_struct *work)
 extern void rtw_indicate_wx_assoc_event(_adapter *padapter);
 extern void rtw_indicate_wx_disassoc_event(_adapter *padapter);
 
-int rtw_os_indicate_connect(_adapter *adapter)
+void rtw_os_indicate_connect(_adapter *adapter)
 {
 	struct mlme_priv *pmlmepriv = &(adapter->mlmepriv);
-	int err = 0;
 
 #ifdef CONFIG_IOCTL_CFG80211
 	if ((check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == _TRUE) ||
-	    (check_fwstate(pmlmepriv, WIFI_ADHOC_STATE) == _TRUE)) {
+	    (check_fwstate(pmlmepriv, WIFI_ADHOC_STATE) == _TRUE))
 		rtw_cfg80211_ibss_indicate_connect(adapter);
-	} else {
-		err = rtw_cfg80211_indicate_connect(adapter);
-		if (err)
-			return -1;
-	}
+	else
+		rtw_cfg80211_indicate_connect(adapter);
 #endif /* CONFIG_IOCTL_CFG80211 */
 
 	rtw_indicate_wx_assoc_event(adapter);
@@ -86,7 +82,7 @@ int rtw_os_indicate_connect(_adapter *adapter)
 	_set_workitem(&adapter->mlmepriv.Linkup_workitem);
 #endif
 
-	return err;
+
 }
 
 extern void indicate_wx_scan_complete_event(_adapter *padapter);
@@ -177,7 +173,9 @@ void rtw_os_indicate_disconnect(_adapter *adapter,  u16 reason, u8 locally_gener
 	_set_workitem(&adapter->mlmepriv.Linkdown_workitem);
 #endif
 	/* modify for CONFIG_IEEE80211W, none 11w also can use the same command */
-	rtw_reset_securitypriv(adapter);
+	rtw_reset_securitypriv_cmd(adapter);
+
+
 }
 
 void rtw_report_sec_ie(_adapter *adapter, u8 authmode, u8 *sec_ie)

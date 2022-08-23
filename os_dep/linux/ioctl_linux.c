@@ -64,6 +64,10 @@ extern u8 convert_ip_addr(u8 hch, u8 mch, u8 lch);
 u32 rtw_rates[] = {1000000, 2000000, 5500000, 11000000,
 	6000000, 9000000, 12000000, 18000000, 24000000, 36000000, 48000000, 54000000};
 
+static const char *const iw_operation_mode[] = {
+	"Auto", "Ad-Hoc", "Managed",  "Master", "Repeater", "Secondary", "Monitor"
+};
+
 /**
  * hwaddr_aton - Convert ASCII string to MAC address
  * @txt: MAC address as a string (e.g., "00:11:22:33:44:55")
@@ -1414,7 +1418,7 @@ static int rtw_wx_set_mode(struct net_device *dev, struct iw_request_info *a,
 		goto exit;
 	}
 
-	if (rtw_set_802_11_infrastructure_mode(padapter, networkType, 0) == _FALSE) {
+	if (rtw_set_802_11_infrastructure_mode(padapter, networkType) == _FALSE) {
 
 		ret = -EPERM;
 		goto exit;
@@ -1813,7 +1817,7 @@ static int rtw_wx_set_wap(struct net_device *dev,
 		src_bssid = temp->sa_data;
 
 		if ((_rtw_memcmp(dst_bssid, src_bssid, ETH_ALEN)) == _TRUE) {
-			if (!rtw_set_802_11_infrastructure_mode(padapter, pnetwork->network.InfrastructureMode, 0)) {
+			if (!rtw_set_802_11_infrastructure_mode(padapter, pnetwork->network.InfrastructureMode)) {
 				ret = -1;
 				_exit_critical_bh(&queue->lock, &irqL);
 				goto cancel_ps_deny;
@@ -2262,7 +2266,7 @@ static int rtw_wx_get_scan(struct net_device *dev, struct iw_request_info *a,
 			&& rtw_mlme_band_check(padapter, ch) == _TRUE
 			&& _TRUE == rtw_validate_ssid(&(pnetwork->network.Ssid))
 			&& (!IS_DFS_SLAVE_WITH_RD(rfctl)
-				|| rtw_rfctl_dfs_domain_unknown(rfctl)
+				|| rtw_odm_dfs_domain_unknown(rfctl_to_dvobj(rfctl))
 				|| !rtw_chset_is_ch_non_ocp(chset, ch))
 		)
 			ev = translate_scan(padapter, a, pnetwork, ev, stop);
@@ -2411,7 +2415,7 @@ static int rtw_wx_set_essid(struct net_device *dev,
 						continue;
 				}
 
-				if (rtw_set_802_11_infrastructure_mode(padapter, pnetwork->network.InfrastructureMode, 0) == _FALSE) {
+				if (rtw_set_802_11_infrastructure_mode(padapter, pnetwork->network.InfrastructureMode) == _FALSE) {
 					ret = -1;
 					_exit_critical_bh(&queue->lock, &irqL);
 					goto cancel_ps_deny;
@@ -3941,9 +3945,6 @@ static int rtw_p2p_set_go_nego_ssid(struct net_device *dev,
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
 	struct wifidirect_info *pwdinfo = &(padapter->wdinfo);
 
-	if (wrqu->data.length > WLAN_SSID_MAXLEN - 1)
-		return -EINVAL;
-
 	RTW_INFO("[%s] ssid = %s, len = %zu\n", __FUNCTION__, extra, strlen(extra));
 	_rtw_memcpy(pwdinfo->nego_ssid, extra, strlen(extra));
 	pwdinfo->nego_ssidlen = strlen(extra);
@@ -3961,9 +3962,6 @@ static int rtw_p2p_set_intent(struct net_device *dev,
 	_adapter						*padapter = (_adapter *)rtw_netdev_priv(dev);
 	struct wifidirect_info			*pwdinfo = &(padapter->wdinfo);
 	u8							intent = pwdinfo->intent;
-
-	if (wrqu->data.length >= 4096)
-		return -1;
 
 	extra[wrqu->data.length] = 0x00;
 
@@ -3989,9 +3987,6 @@ static int rtw_p2p_set_listen_ch(struct net_device *dev,
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
 	struct wifidirect_info *pwdinfo = &(padapter->wdinfo);
 	u8	listen_ch = pwdinfo->listen_channel;	/*	Listen channel number */
-
-	if (wrqu->data.length >= 4096)
-		return -1;
 
 	extra[wrqu->data.length] = 0x00;
 	listen_ch = rtw_atoi(extra);
@@ -4019,9 +4014,6 @@ static int rtw_p2p_set_op_ch(struct net_device *dev,
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
 	struct wifidirect_info *pwdinfo = &(padapter->wdinfo);
 	u8	op_ch = pwdinfo->operating_channel;	/*	Operating channel number */
-
-	if (wrqu->data.length >= 4096)
-		return -1;
 
 	extra[wrqu->data.length] = 0x00;
 
@@ -4097,8 +4089,6 @@ static int rtw_p2p_setDN(struct net_device *dev,
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
 	struct wifidirect_info *pwdinfo = &(padapter->wdinfo);
 
-	if (wrqu->data.length > WPS_MAX_DEVICE_NAME_LEN - 1)
-		return -EINVAL;
 
 	RTW_INFO("[%s] %s %d\n", __FUNCTION__, extra, wrqu->data.length - 1);
 	_rtw_memset(pwdinfo->device_name, 0x00, WPS_MAX_DEVICE_NAME_LEN);
@@ -7978,6 +7968,7 @@ static int rtw_wowlan_ctrl(struct net_device *dev,
 	struct wowlan_ioctl_param poidparam;
 	struct pwrctrl_priv *pwrctrlpriv = adapter_to_pwrctl(padapter);
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct sta_info	*psta = NULL;
 	int ret = 0;
 	systime start_time = rtw_get_current_time();
 	poidparam.subcode = 0;
@@ -8049,7 +8040,8 @@ static int rtw_wowlan_set_pattern(struct net_device *dev,
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct wowlan_ioctl_param poidparam;
-	int ret = 0;
+	int ret = 0, len = 0, i = 0;
+	systime start_time = rtw_get_current_time();
 	u8 input[wrqu->data.length];
 	u8 index = 0;
 
@@ -8179,7 +8171,7 @@ static int rtw_pm_set(struct net_device *dev,
 		if (sscanf(extra + 9, "%u", &mode) > 0)
 			ret = rtw_pm_set_lps_1t1r(padapter, mode);
 #endif
-	}
+	} 
 #ifdef CONFIG_WOWLAN
 	else if (_rtw_memcmp(extra, "wow_lps=", 8)) {
 		sscanf(extra + 8, "%u", &mode);
@@ -9599,7 +9591,7 @@ static int rtw_mp_efuse_set(struct net_device *dev,
 			err = 0;
 			goto exit;
 		}
-
+	
 		rtw_write8(padapter, 0xa3, 0x05);
 		BTStatus = rtw_read8(padapter, 0xa0);
 		RTW_INFO("%s: btwmap before read 0xa0 BT Status =0x%x\n", __FUNCTION__, BTStatus);
@@ -9827,7 +9819,11 @@ static int rtw_mp_efuse_set(struct net_device *dev,
 		rtw_hal_read_chip_info(padapter);
 		/* set mac addr*/
 		rtw_macaddr_cfg(adapter_mac_addr(padapter), get_hal_mac_addr(padapter));
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0))
+		eth_hw_addr_set(padapter->pnetdev, get_hal_mac_addr(padapter));
+#else	
 		_rtw_memcpy(padapter->pnetdev->dev_addr, get_hal_mac_addr(padapter), ETH_ALEN); /* set mac addr to net_device */
+#endif
 
 #ifdef CONFIG_P2P
 		rtw_init_wifidirect_addrs(padapter, adapter_mac_addr(padapter), adapter_mac_addr(padapter));
@@ -10216,7 +10212,7 @@ static int rtw_priv_mp_get(struct net_device *dev,
 	case MP_DPK:
 		RTW_INFO("set MP_DPK\n");
 		status = rtw_mp_dpk(dev, info, wdata, extra);
-		break;
+	/* fallthrough */
 	default:
 		status = -EIO;
 	}
@@ -10470,39 +10466,40 @@ static int rtw_priv_get(struct net_device *dev,
 			}
 			i--;
 		}
-		if (subcmd == MP_CHANNEL || subcmd == MP_BANDWIDTH)
+		if (subcmd == MP_CHANNEL || subcmd == MP_BANDWIDTH || subcmd == MP_START)
 			p_iqk_info->rfk_forbidden = _FALSE;
 		rtw_priv_mp_get(dev, info, wdata, extra);
-		rtw_msleep_os(10); /* delay 5ms for sending pkt before exit adb shell operation */
 		p_iqk_info->rfk_forbidden = _FALSE;
 #endif
-	} else {
-			switch (subcmd) {
+		return 0;
+	}
+
+	switch (subcmd) {
 #if defined(CONFIG_RTL8723B)
-			case MP_SetBT:
-				RTW_INFO("set MP_SetBT\n");
-				rtw_mp_SetBT(dev, info, wdata, extra);
-				break;
+	case MP_SetBT:
+		RTW_INFO("set MP_SetBT\n");
+		rtw_mp_SetBT(dev, info, wdata, extra);
+		break;
 #endif
 #ifdef CONFIG_SDIO_INDIRECT_ACCESS
-			case MP_SD_IREAD:
-				rtw_mp_sd_iread(dev, info, wrqu, extra);
-				break;
-			case MP_SD_IWRITE:
-				rtw_mp_sd_iwrite(dev, info, wrqu, extra);
-				break;
+	case MP_SD_IREAD:
+		rtw_mp_sd_iread(dev, info, wrqu, extra);
+		break;
+	case MP_SD_IWRITE:
+		rtw_mp_sd_iwrite(dev, info, wrqu, extra);
+		break;
 #endif
 #ifdef CONFIG_APPEND_VENDOR_IE_ENABLE
-			case VENDOR_IE_GET:
-				RTW_INFO("get case VENDOR_IE_GET\n");
-				rtw_vendor_ie_get(dev , info , wdata , extra);
-				break;
+	case VENDOR_IE_GET:
+		RTW_INFO("get case VENDOR_IE_GET\n");
+		rtw_vendor_ie_get(dev , info , wdata , extra);
+		break;
 #endif
-			default:
-				return -EIO;
-			}
-		}
+	default:
+		return -EIO;
+	}
 
+	rtw_msleep_os(10); /* delay 5ms for sending pkt before exit adb shell operation */
 	return 0;
 }
 
@@ -11442,7 +11439,7 @@ static s32 initpseudoadhoc(PADAPTER padapter)
 	s32 err;
 
 	networkType = Ndis802_11IBSS;
-	err = rtw_set_802_11_infrastructure_mode(padapter, networkType, 0);
+	err = rtw_set_802_11_infrastructure_mode(padapter, networkType);
 	if (err == _FALSE)
 		return _FAIL;
 
@@ -12497,12 +12494,8 @@ static int _rtw_ioctl_wext_private(struct net_device *dev, union iwreq_data *wrq
 	if (!input_len)
 		return -EINVAL;
 	input = rtw_zmalloc(input_len);
-
-	if (input == NULL) {
-		err = -EOPNOTSUPP;
-		goto exit;
-	}
-
+	if (NULL == input)
+		return -ENOMEM;
 	if (copy_from_user(input, wdata.data.pointer, input_len)) {
 		err = -EFAULT;
 		goto exit;
@@ -12510,6 +12503,11 @@ static int _rtw_ioctl_wext_private(struct net_device *dev, union iwreq_data *wrq
 	input[input_len - 1] = '\0';
 	ptr = input;
 	len = input_len;
+
+	if (ptr == NULL) {
+		err = -EOPNOTSUPP;
+		goto exit;
+	}
 
 	sscanf(ptr, "%16s", cmdname);
 	cmdlen = strlen(cmdname);
@@ -12603,7 +12601,7 @@ static int _rtw_ioctl_wext_private(struct net_device *dev, union iwreq_data *wrq
 			count = 0;
 			do {
 				str = strsep(&ptr, delim);
-				if (NULL == str || count >= 4096)
+				if (NULL == str)
 					break;
 				sscanf(str, "%i", &temp);
 				buffer[count++] = (u8)temp;
@@ -12622,7 +12620,7 @@ static int _rtw_ioctl_wext_private(struct net_device *dev, union iwreq_data *wrq
 			count = 0;
 			do {
 				str = strsep(&ptr, delim);
-				if (NULL == str || count >= 1024)
+				if (NULL == str)
 					break;
 				sscanf(str, "%i", &temp);
 				((s32 *)buffer)[count++] = (s32)temp;
@@ -12724,11 +12722,6 @@ static int _rtw_ioctl_wext_private(struct net_device *dev, union iwreq_data *wrq
 		extra = buffer;
 
 	handler = priv[priv_args[k].cmd - SIOCIWFIRSTPRIV];
-	if (handler == NULL) {
-		err = -EINVAL;
-		goto exit;
-	}
-
 	err = handler(dev, NULL, &wdata, extra);
 
 	/* If we have to get some data */

@@ -100,7 +100,7 @@ void rtw_btcoex_ScanNotify(PADAPTER padapter, u8 type)
 	hal_btcoex_ScanNotify(padapter, type);
 }
 
-static void _rtw_btcoex_connect_notify(PADAPTER padapter, u8 action)
+void rtw_btcoex_ConnectNotify(PADAPTER padapter, u8 action)
 {
 	PHAL_DATA_TYPE	pHalData;
 
@@ -515,9 +515,9 @@ u8 rtw_btcoex_get_pg_rfe_type(PADAPTER padapter)
 
 u8 rtw_btcoex_is_tfbga_package_type(PADAPTER padapter)
 {
-#ifdef CONFIG_RTL8723B
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
 
+#ifdef CONFIG_RTL8723B
 	if ((pHalData->PackageType == PACKAGE_TFBGA79) || (pHalData->PackageType == PACKAGE_TFBGA80)
 	    || (pHalData->PackageType == PACKAGE_TFBGA90))
 		return _TRUE;
@@ -1468,7 +1468,9 @@ u8 rtw_btcoex_sendmsgbysocket(_adapter *padapter, u8 *msg, u8 msg_size, bool for
 {
 	u8 error;
 	struct msghdr	udpmsg;
+#ifdef set_fs
 	mm_segment_t	oldfs;
+#endif
 	struct iovec	iov;
 	struct bt_coex_info *pcoex_info = &padapter->coex_info;
 
@@ -1498,15 +1500,18 @@ u8 rtw_btcoex_sendmsgbysocket(_adapter *padapter, u8 *msg, u8 msg_size, bool for
 	udpmsg.msg_control	= NULL;
 	udpmsg.msg_controllen = 0;
 	udpmsg.msg_flags	= MSG_DONTWAIT | MSG_NOSIGNAL;
+#ifdef set_fs
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
-
+#endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
 	error = sock_sendmsg(pcoex_info->udpsock, &udpmsg);
 #else
 	error = sock_sendmsg(pcoex_info->udpsock, &udpmsg, msg_size);
 #endif
+#ifdef set_fs
 	set_fs(oldfs);
+#endif
 	if (error < 0) {
 		RTW_INFO("Error when sendimg msg, error:%d\n", error);
 		return _FAIL;
@@ -1783,19 +1788,5 @@ void rtw_btcoex_set_ant_info(PADAPTER padapter)
 	else
 #endif
 		rtw_btcoex_wifionly_AntInfoSetting(padapter);
-}
-
-void rtw_btcoex_connect_notify(PADAPTER padapter, u8 join_type)
-{
-#ifdef CONFIG_BT_COEXIST
-	PHAL_DATA_TYPE	pHalData;
-
-	pHalData = GET_HAL_DATA(padapter);
-
-	if (pHalData->EEPROMBluetoothCoexist == _TRUE)
-		_rtw_btcoex_connect_notify(padapter, join_type ? _FALSE : _TRUE);
-	else
-#endif /* CONFIG_BT_COEXIST */
-	rtw_btcoex_wifionly_connect_notify(padapter);
 }
 

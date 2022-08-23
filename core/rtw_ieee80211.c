@@ -96,34 +96,6 @@ u8 mgn_rates_vht4ss[10] = {MGN_VHT4SS_MCS0, MGN_VHT4SS_MCS1, MGN_VHT4SS_MCS2, MG
 	, MGN_VHT4SS_MCS5, MGN_VHT4SS_MCS6, MGN_VHT4SS_MCS7, MGN_VHT4SS_MCS8, MGN_VHT4SS_MCS9
 			  };
 
-RATE_SECTION mgn_rate_to_rs(enum MGN_RATE rate)
-{
-	RATE_SECTION rs = RATE_SECTION_NUM;
-
-	if (IS_CCK_RATE(rate))
-		rs = CCK;
-	else if (IS_OFDM_RATE(rate))
-		rs = OFDM;
-	else if (IS_HT1SS_RATE(rate))
-		rs = HT_1SS;
-	else if (IS_HT2SS_RATE(rate))
-		rs = HT_2SS;
-	else if (IS_HT3SS_RATE(rate))
-		rs = HT_3SS;
-	else if (IS_HT4SS_RATE(rate))
-		rs = HT_4SS;
-	else if (IS_VHT1SS_RATE(rate))
-		rs = VHT_1SS;
-	else if (IS_VHT2SS_RATE(rate))
-		rs = VHT_2SS;
-	else if (IS_VHT3SS_RATE(rate))
-		rs = VHT_3SS;
-	else if (IS_VHT4SS_RATE(rate))
-		rs = VHT_4SS;
-
-	return rs;
-}
-
 static const char *const _rate_section_str[] = {
 	"CCK",
 	"OFDM",
@@ -468,6 +440,7 @@ void rtw_set_supported_rate(u8 *SupportedRates, uint mode)
 void rtw_filter_suppport_rateie(WLAN_BSSID_EX *pbss_network, u8 keep)
 {
 	u8 i, idx = 0, new_rate[NDIS_802_11_LENGTH_RATES_EX], *p;
+	int ret = 0;
 	uint iscck, isofdm, ie_orilen = 0, remain_len;
 	u8 *remain_ies;
 
@@ -2845,7 +2818,7 @@ u32	rtw_ht_mcs_set_to_bitmap(u8 *mcs_set, u8 nss)
 }
 
 /* show MCS rate, unit: 100Kbps */
-u16 rtw_ht_mcs_rate(u8 bw_40MHz, u8 short_GI, unsigned char *MCS_rate)
+u16 rtw_mcs_rate(u8 rf_type, u8 bw_40MHz, u8 short_GI, unsigned char *MCS_rate)
 {
 	u16 max_rate = 0;
 

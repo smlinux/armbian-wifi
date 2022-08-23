@@ -1171,29 +1171,6 @@ u8 rtw_mi_sreset_adapter_hdl(_adapter *padapter, u8 bstart)
 
 	return _rtw_mi_process(padapter, _FALSE, &in_data, _rtw_mi_sreset_adapter_hdl);
 }
-
-#if defined(DBG_CONFIG_ERROR_RESET) && defined(CONFIG_CONCURRENT_MODE)
-void rtw_mi_ap_info_restore(_adapter *adapter)
-{
-	int i;
-	_adapter *iface;
-	struct mlme_priv *pmlmepriv;
-	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
-
-	for (i = 0; i < dvobj->iface_nums; i++) {
-		iface = dvobj->padapters[i];
-		if (iface) {
-			pmlmepriv = &iface->mlmepriv;
-
-			if (MLME_IS_AP(iface) || MLME_IS_MESH(iface)) {
-				RTW_INFO(FUNC_ADPT_FMT" %s\n", FUNC_ADPT_ARG(iface), MLME_IS_AP(iface) ? "AP" : "MESH");
-				rtw_iface_bcmc_sec_cam_map_restore(iface);
-			}
-		}
-	}
-}
-#endif /*#if defined(DBG_CONFIG_ERROR_RESET) && defined(CONFIG_CONCURRENT_MODE)*/
-
 u8 rtw_mi_buddy_sreset_adapter_hdl(_adapter *padapter, u8 bstart)
 {
 	u8 in_data = bstart;
@@ -1283,15 +1260,14 @@ u8 rtw_mi_buddy_stay_in_p2p_mode(_adapter *padapter)
 _adapter *rtw_get_iface_by_id(_adapter *padapter, u8 iface_id)
 {
 	_adapter *iface = NULL;
-	struct dvobj_priv *dvobj;
+	struct dvobj_priv *dvobj = adapter_to_dvobj(padapter);
 
 	if ((padapter == NULL) || (iface_id >= CONFIG_IFACE_NUMBER)) {
 		rtw_warn_on(1);
 		return iface;
 	}
 
-	dvobj = adapter_to_dvobj(padapter);
-	return dvobj->padapters[iface_id];
+	return  dvobj->padapters[iface_id];
 }
 
 _adapter *rtw_get_iface_by_macddr(_adapter *padapter, const u8 *mac_addr)

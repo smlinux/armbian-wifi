@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -106,38 +106,12 @@ extern uint rtw_drv_log_level;
 
 #if defined(_dbgdump)
 
-#ifdef PLATFORM_LINUX
-#ifdef DBG_THREAD_PID
-#define T_PID_FMT	"(%5u) "
-#define T_PID_ARG	current->pid
-#else /* !DBG_THREAD_PID */
-#define T_PID_FMT	"%s"
-#define T_PID_ARG	""
-#endif /* !DBG_THREAD_PID */
-
-#ifdef DBG_CPU_INFO
-#define CPU_INFO_FMT	"[%u] "
-#define CPU_INFO_ARG	get_cpu()
-#else /* !DBG_CPU_INFO */
-#define CPU_INFO_FMT	"%s"
-#define CPU_INFO_ARG	""
-#endif /* !DBG_CPU_INFO */
-
-/* Extra information in prefix */
-#define EX_INFO_FMT	T_PID_FMT CPU_INFO_FMT
-#define EX_INFO_ARG	T_PID_ARG, CPU_INFO_ARG
-#else /* !PLATFORM_LINUX */
-#define EX_INFO_FMT	"%s"
-#define EX_INFO_ARG	""
-#endif /* !PLATFORM_LINUX */
-
 /* with driver-defined prefix */
 #undef RTW_PRINT
 #define RTW_PRINT(fmt, arg...)     \
 	do {\
 		if (_DRV_ALWAYS_ <= rtw_drv_log_level) {\
-			_dbgdump(EX_INFO_FMT DRIVER_PREFIX fmt, \
-				 EX_INFO_ARG, ##arg);\
+			_dbgdump(DRIVER_PREFIX fmt, ##arg);\
 		} \
 	} while (0)
 
@@ -145,8 +119,7 @@ extern uint rtw_drv_log_level;
 #define RTW_ERR(fmt, arg...)     \
 	do {\
 		if (_DRV_ERR_ <= rtw_drv_log_level) {\
-			_dbgdump(EX_INFO_FMT DRIVER_PREFIX "ERROR " fmt, \
-				 EX_INFO_ARG, ##arg);\
+			_dbgdump(DRIVER_PREFIX"ERROR " fmt, ##arg);\
 		} \
 	} while (0)
 
@@ -155,8 +128,7 @@ extern uint rtw_drv_log_level;
 #define RTW_WARN(fmt, arg...)     \
 	do {\
 		if (_DRV_WARNING_ <= rtw_drv_log_level) {\
-			_dbgdump(EX_INFO_FMT DRIVER_PREFIX "WARN " fmt, \
-				 EX_INFO_ARG, ##arg);\
+			_dbgdump(DRIVER_PREFIX"WARN " fmt, ##arg);\
 		} \
 	} while (0)
 
@@ -164,8 +136,7 @@ extern uint rtw_drv_log_level;
 #define RTW_INFO(fmt, arg...)     \
 	do {\
 		if (_DRV_INFO_ <= rtw_drv_log_level) {\
-			_dbgdump(EX_INFO_FMT DRIVER_PREFIX fmt, \
-				 EX_INFO_ARG, ##arg);\
+			_dbgdump(DRIVER_PREFIX fmt, ##arg);\
 		} \
 	} while (0)
 
@@ -174,8 +145,7 @@ extern uint rtw_drv_log_level;
 #define RTW_DBG(fmt, arg...)     \
 	do {\
 		if (_DRV_DEBUG_ <= rtw_drv_log_level) {\
-			_dbgdump(EX_INFO_FMT DRIVER_PREFIX fmt, \
-				 EX_INFO_ARG, ##arg);\
+			_dbgdump(DRIVER_PREFIX fmt, ##arg);\
 		} \
 	} while (0)
 
@@ -289,6 +259,9 @@ void dump_drv_cfg(void *sel);
 #ifdef CONFIG_SDIO_HCI
 void sd_f0_reg_dump(void *sel, _adapter *adapter);
 void sdio_local_reg_dump(void *sel, _adapter *adapter);
+#ifdef CONFIG_SDIO_MONITOR
+u32 sd_monitor_sdio_clk(_adapter *adapter, u8 clk_monitor_mode);
+#endif
 #endif /* CONFIG_SDIO_HCI */
 
 void mac_reg_dump(void *sel, _adapter *adapter);
@@ -455,6 +428,8 @@ ssize_t proc_set_rx_ampdu_density(struct file *file, const char __user *buffer, 
 int proc_get_tx_ampdu_density(struct seq_file *m, void *v);
 ssize_t proc_set_tx_ampdu_density(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
 
+int proc_get_tx_quick_addba_req(struct seq_file *m, void *v);
+ssize_t proc_set_tx_quick_addba_req(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
 #ifdef CONFIG_TX_AMSDU
 int proc_get_tx_amsdu(struct seq_file *m, void *v);
 ssize_t proc_set_tx_amsdu(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
@@ -635,6 +610,10 @@ int proc_get_lps_chk_tp(struct seq_file *m, void *v);
 ssize_t proc_set_smps(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
 int proc_get_smps(struct seq_file *m, void *v);
 #endif
+
+static int proc_get_shift_rxagc(struct seq_file *m, void *v);
+static ssize_t proc_set_shift_rxagc(struct file *file, const char __user *buffer,
+	size_t count, loff_t *pos, void *data);
 
 #define _drv_always_		1
 #define _drv_emerg_			2

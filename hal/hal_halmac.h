@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2018 Realtek Corporation.
+ * Copyright(c) 2015 - 2019 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -131,7 +131,6 @@ int rtw_halmac_get_rx_agg_align_size(struct dvobj_priv *d, u8 *size);
 int rtw_halmac_get_rx_drv_info_sz(struct dvobj_priv *, u8 *sz);
 int rtw_halmac_get_tx_desc_size(struct dvobj_priv *d, u32 *size);
 int rtw_halmac_get_rx_desc_size(struct dvobj_priv *d, u32 *size);
-int rtw_halmac_get_tx_dma_ch_map(struct dvobj_priv *d, u8 *dma_ch_map, u8 map_size);
 int rtw_halmac_get_ori_h2c_size(struct dvobj_priv *d, u32 *size);
 int rtw_halmac_get_oqt_size(struct dvobj_priv *d, u8 *size);
 int rtw_halmac_get_ac_queue_number(struct dvobj_priv *d, u8 *num);
@@ -210,6 +209,12 @@ u32 rtw_halmac_sdio_get_tx_addr(struct dvobj_priv *, u8 *desc, u32 size);
 int rtw_halmac_sdio_tx_allowed(struct dvobj_priv *, u8 *buf, u32 size);
 u32 rtw_halmac_sdio_get_rx_addr(struct dvobj_priv *, u8 *seq);
 int rtw_halmac_sdio_set_tx_format(struct dvobj_priv *d, enum halmac_sdio_tx_format format);
+#ifdef CONFIG_SDIO_MONITOR
+u32 rtw_halmac_sdio_get_int_lat(struct dvobj_priv *d);
+u32 rtw_halmac_sdio_get_lk_cnt(struct dvobj_priv *d);
+int rtw_halmac_sdio_set_wt_en(struct dvobj_priv *d);
+int rtw_halmac_set_sdio_clk_monitor(struct dvobj_priv *d, u8 clk_monitor_mode);
+#endif
 #endif /* CONFIG_SDIO_HCI */
 
 #ifdef CONFIG_USB_HCI

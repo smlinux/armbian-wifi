@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -354,7 +354,6 @@ handle_tkip_countermeasure:
 	}
 
 	_rtw_memcpy(&pmlmepriv->assoc_ssid, ssid, sizeof(NDIS_802_11_SSID));
-	pmlmepriv->assoc_ch = 0;
 	pmlmepriv->assoc_by_bssid = _FALSE;
 
 	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY) == _TRUE)
@@ -438,11 +437,13 @@ release_mlme_lock:
 	_exit_critical_bh(&pmlmepriv->lock, &irqL);
 
 exit:
+
+
 	return status;
 }
 
 u8 rtw_set_802_11_infrastructure_mode(_adapter *padapter,
-			      NDIS_802_11_NETWORK_INFRASTRUCTURE networktype, u8 flags)
+			      NDIS_802_11_NETWORK_INFRASTRUCTURE networktype)
 {
 	_irqL irqL;
 	struct	mlme_priv	*pmlmepriv = &padapter->mlmepriv;
@@ -450,7 +451,6 @@ u8 rtw_set_802_11_infrastructure_mode(_adapter *padapter,
 	NDIS_802_11_NETWORK_INFRASTRUCTURE *pold_state = &(cur_network->network.InfrastructureMode);
 	u8 ap2sta_mode = _FALSE;
 	u8 ret = _TRUE;
-	u8 is_linked = _FALSE, is_adhoc_master = _FALSE;
 
 	if (*pold_state != networktype) {
 		/* RTW_INFO("change mode, old_mode=%d, new_mode=%d, fw_state=0x%x\n", *pold_state, networktype, get_fwstate(pmlmepriv)); */
@@ -467,29 +467,19 @@ u8 rtw_set_802_11_infrastructure_mode(_adapter *padapter,
 		}
 
 		_enter_critical_bh(&pmlmepriv->lock, &irqL);
-		is_linked = check_fwstate(pmlmepriv, _FW_LINKED);
-		is_adhoc_master = check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE);
 
-		/* flags = 0, means enqueue cmd and no wait */
-		if (flags != 0)
-			_exit_critical_bh(&pmlmepriv->lock, &irqL);
+		if ((check_fwstate(pmlmepriv, _FW_LINKED) == _TRUE) || (*pold_state == Ndis802_11IBSS))
+			rtw_disassoc_cmd(padapter, 0, 0);
 
-		if ((is_linked == _TRUE) || (*pold_state == Ndis802_11IBSS))
-			rtw_disassoc_cmd(padapter, 0, flags);
-
-		if ((is_linked == _TRUE) ||
-		    (is_adhoc_master == _TRUE))
-			rtw_free_assoc_resources_cmd(padapter, _TRUE, flags);
+		if ((check_fwstate(pmlmepriv, _FW_LINKED) == _TRUE) ||
+		    (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) == _TRUE))
+			rtw_free_assoc_resources_cmd(padapter, _TRUE, 0);
 
 		if ((*pold_state == Ndis802_11Infrastructure) || (*pold_state == Ndis802_11IBSS)) {
-			if (is_linked == _TRUE) {
+			if (check_fwstate(pmlmepriv, _FW_LINKED) == _TRUE) {
 				rtw_indicate_disconnect(padapter, 0, _FALSE); /*will clr Linked_state; before this function, we must have checked whether issue dis-assoc_cmd or not*/
 			}
 		}
-
-		/* flags = 0, means enqueue cmd and no wait */
-		if (flags != 0)
-			_enter_critical_bh(&pmlmepriv->lock, &irqL);
 
 		*pold_state = networktype;
 
@@ -625,71 +615,6 @@ exit:
 	return res;
 }
 #endif
-
-#ifdef CONFIG_RTW_ACS
-u8 rtw_set_acs_sitesurvey(_adapter *adapter)
-{
-	struct rf_ctl_t *rfctl = adapter_to_rfctl(adapter);
-	struct sitesurvey_parm parm;
-	u8 uch;
-	u8 ch_num = 0;
-	int i;
-	BAND_TYPE band;
-	u8 (*center_chs_num)(u8) = NULL;
-	u8 (*center_chs)(u8, u8) = NULL;
-	u8 ret = _FAIL;
-
-	if (!rtw_mi_get_ch_setting_union(adapter, &uch, NULL, NULL))
-		goto exit;
-
-	_rtw_memset(&parm, 0, sizeof(struct sitesurvey_parm));
-	parm.scan_mode = SCAN_PASSIVE;
-	parm.bw = CHANNEL_WIDTH_20;
-	parm.acs = 1;
-
-	for (band = BAND_ON_2_4G; band < BAND_MAX; band++) {
-		if (band == BAND_ON_2_4G) {
-			center_chs_num = center_chs_2g_num;
-			center_chs = center_chs_2g;
-		} else
-		#ifdef CONFIG_IEEE80211_BAND_5GHZ
-		if (band == BAND_ON_5G) {
-			center_chs_num = center_chs_5g_num;
-			center_chs = center_chs_5g;
-		} else
-		#endif
-		{
-			center_chs_num = NULL;
-			center_chs = NULL;
-		}
-
-		if (!center_chs_num || !center_chs)
-			continue;
-
-		if (rfctl->ch_sel_within_same_band) {
-			if (rtw_is_2g_ch(uch) && band != BAND_ON_2_4G)
-				continue;
-			#ifdef CONFIG_IEEE80211_BAND_5GHZ
-			if (rtw_is_5g_ch(uch) && band != BAND_ON_5G)
-				continue;
-			#endif
-		}
-
-		ch_num = center_chs_num(CHANNEL_WIDTH_20);	
-		for (i = 0; i < ch_num && parm.ch_num < RTW_CHANNEL_SCAN_AMOUNT; i++) {
-			parm.ch[parm.ch_num].hw_value = center_chs(CHANNEL_WIDTH_20, i);
-			parm.ch[parm.ch_num].flags = RTW_IEEE80211_CHAN_PASSIVE_SCAN;
-			parm.ch_num++;
-		}
-	}
-
-	ret = rtw_set_802_11_bssid_list_scan(adapter, &parm);
-
-exit:
-	return ret;
-}
-#endif /* CONFIG_RTW_ACS */
-
 u8 rtw_set_802_11_authentication_mode(_adapter *padapter, NDIS_802_11_AUTHENTICATION_MODE authmode)
 {
 	struct security_priv *psecuritypriv = &padapter->securitypriv;
@@ -787,6 +712,9 @@ u16 rtw_get_cur_max_rate(_adapter *adapter)
 	unsigned char	sta_bssrate[NumRates];
 	struct sta_info *psta = NULL;
 	u8	short_GI = 0;
+#ifdef CONFIG_80211N_HT
+	u8	rf_type = 0;
+#endif
 
 #ifdef CONFIG_MP_INCLUDED
 	if (adapter->registrypriv.mp_mode == 1) {
@@ -807,7 +735,9 @@ u16 rtw_get_cur_max_rate(_adapter *adapter)
 
 #ifdef CONFIG_80211N_HT
 	if (is_supported_ht(psta->wireless_mode)) {
-		max_rate = rtw_ht_mcs_rate((psta->cmn.bw_mode == CHANNEL_WIDTH_40) ? 1 : 0
+		rtw_hal_get_hwreg(adapter, HW_VAR_RF_TYPE, (u8 *)(&rf_type));
+		max_rate = rtw_mcs_rate(rf_type
+			, (psta->cmn.bw_mode == CHANNEL_WIDTH_40) ? 1 : 0
 			, short_GI
 			, psta->htpriv.ht_cap.supp_mcs_set
 		);

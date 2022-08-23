@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2015 - 2019 Realtek Corporation.
+ * Copyright(c) 2015 - 2017 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -17,12 +17,12 @@
  */
 #define AUTOCONF_INCLUDED
 
-#define RTL871X_MODULE_NAME "88x2BS"
-#define DRV_NAME "rtl88x2bs"
+#define RTL871X_MODULE_NAME "88x2CS"
+#define DRV_NAME "rtl88x2cs"
 
-/* Set CONFIG_RTL8822B from Makefile */
-#ifndef CONFIG_RTL8822B
-#define CONFIG_RTL8822B
+/* Set CONFIG_RTL8822C from Makefile */
+#ifndef CONFIG_RTL8822C
+#define CONFIG_RTL8822C
 #endif
 #define CONFIG_SDIO_HCI
 #define PLATFORM_LINUX
@@ -41,6 +41,8 @@
 		#define CONFIG_80211N_HT
 	#endif
 #endif
+
+#define CONFIG_IEEE80211_BAND_5GHZ
 
 /* Set CONFIG_IOCTL_CFG80211 from Makefile */
 #ifdef CONFIG_IOCTL_CFG80211
@@ -122,12 +124,11 @@
 
 #define DISABLE_BB_RF		0
 #define RTW_NOTCH_FILTER	0 /* 0:Disable, 1:Enable */
-#define CONFIG_DYNAMIC_SOML
 
 #define CONFIG_SUPPORT_TRX_SHARED
 #ifdef CONFIG_SUPPORT_TRX_SHARED
-#define DFT_TRX_SHARE_MODE	1
-#endif /* CONFIG_SUPPORT_TRX_SHARED */
+#define DFT_TRX_SHARE_MODE	2
+#endif
 
 /*
  * Software feature Related Config
@@ -138,31 +139,24 @@
 #define RTW_RECV_THREAD_HIGH_PRIORITY
 #endif/*CONFIG_RECV_THREAD_MODE*/
 
-/* Speed up C2H handle and avoid race condition */
-#define RTW_HANDLE_C2H_IN_ISR
-
 /*
  * Interface Related Config
  */
 #define CONFIG_TX_AGGREGATION
 #define CONFIG_XMIT_THREAD_MODE	/* necessary for SDIO */
 #define RTW_XMIT_THREAD_HIGH_PRIORITY
-/*#define RTW_XMIT_THREAD_HIGH_PRIORITY_AGG*/
-/*#define CONFIG_SDIO_TX_ENABLE_AVAL_INT*/ /* not implemented yet */
-#define CONFIG_SDIO_RX_COPY
-#ifdef CONFIG_PREALLOC_RX_SKB_BUFFER
-#ifndef CONFIG_SDIO_RX_COPY
-#error "CONFIG_PREALLOC_RX_SKB_BUFFER would need CONFIG_SDIO_RX_COPY"
-#endif
-#endif /* CONFIG_PREALLOC_RX_SKB_BUFFER */
-
+#define RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
 #define CONFIG_SDIO_HOOK_DEV_SHUTDOWN
-
+/*#define CONFIG_SDIO_TX_ENABLE_AVAL_INT*/ /* not implemented yet */
+/* #define CONFIG_SDIO_TX_FORMAT_DUMMY_AUTO */
+#define CONFIG_SDIO_RX_COPY
+/* #define CONFIG_SDIO_MONITOR */
+#define DBG_SDIO	1
 
 /*
  * Others
  */
-/*#define CONFIG_MAC_LOOPBACK_DRIVER*/
+/* #define CONFIG_MAC_LOOPBACK_DRIVER */
 #define CONFIG_SKB_COPY		/* for amsdu */
 #define CONFIG_NEW_SIGNAL_STAT_PROCESS
 #define CONFIG_EMBEDDED_FWIMG
@@ -226,11 +220,13 @@
 
 	#ifdef CONFIG_LPS_LCLK
 	#define CONFIG_DETECT_CPWM_BY_POLLING
+	#define DBG_CHECK_FW_PS_STATE
 	#define CONFIG_LPS_RPWM_TIMER
 	#if defined(CONFIG_LPS_RPWM_TIMER) || defined(CONFIG_DETECT_CPWM_BY_POLLING)
 	#define LPS_RPWM_WAIT_MS 300
 	#endif
 	#define CONFIG_LPS_LCLK_WD_TIMER /* Watch Dog timer in LPS LCLK */
+	/* #define CONFIG_LPS_PG */
 	#endif
 
 	#ifdef CONFIG_IPS
@@ -249,6 +245,8 @@
 	#ifndef CONFIG_LPS
 		#define CONFIG_LPS	/* download reserved page to FW */
 	#endif
+	#define CONFIG_SDIO_MULTI_FUNCTION_COEX
+	#define DBG_SDIO_MULTI_FUNCTION_COEX 0
 #endif /* !CONFIG_BT_COEXIST */
 
 #ifdef CONFIG_GPIO_WAKEUP
@@ -263,50 +261,6 @@
 #define CONFIG_HW_ANTENNA_DIVERSITY
 #endif /* CONFIG_ANTENNA_DIVERSITY */
 
-/*
- * Platform
- */
-#ifdef CONFIG_PLATFORM_HISILICON_HI3798_MV200_HDMI_DONGLE
-	#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY
-		#undef RTW_XMIT_THREAD_HIGH_PRIORITY
-	#endif
-	#ifdef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
-		#undef RTW_XMIT_THREAD_HIGH_PRIORITY_AGG
-	#endif
-
-	#define CONFIG_REDUCE_TX_CPU_LOADING
-
-	#define CONFIG_STA_SCAN_BACKOP
-
-	#ifdef CONFIG_POWER_SAVING
-	#ifdef CONFIG_LPS
-		#define CONFIG_LPS_NOT_LEAVE_FOR_ICMP
-		#define CONFIG_LPS_CHK_BY_TP
-		#ifdef CONFIG_LPS_CHK_BY_TP
-			#define LPS_TX_TP_TH		60 /*Mbps*/
-			#define LPS_RX_TP_TH	60 /*Mbps*/
-			#define LPS_BI_TP_TH		60 /*Mbps*//*TX + RX*/
-			#define LPS_TP_CHK_CNT	1 /*10s*/
-			#define LPS_CHK_PKTS_TX	80000
-			#define LPS_CHK_PKTS_RX	80000
-			#define LPS_BCN_CNT_MONITOR
-		#endif
-		#define CONFIG_LPS_PWR_TRACKING
-		#ifdef CONFIG_LPS_PWR_TRACKING
-		#define THERMAL_DIFF_TH 2
-		#endif
-	#endif /*CONFIG_LPS*/
-
-	#define CONFIG_CTRL_TXSS_BY_TP
-	#ifdef CONFIG_CTRL_TXSS_BY_TP
-		#define TXSS_TP_TH	40 /*Mbps 20M:72.2, 40M:150, 80M:325, 160M:650*/
-		#define TXSS_TP_CHK_CNT	3 /* unit 2s*/
-		#define DBG_CTRL_TXSS
-	#endif
-
-	#endif/*CONFIG_POWER_SAVING*/
-#endif /*CONFIG_PLATFORM_HISILICON_HI3798_MV200_HDMI_DONGLE*/
-
 
 /*
  * Debug Related Config
@@ -317,18 +271,19 @@
 #define DBG	0	/* for ODM & BTCOEX debug */
 #endif /* !CONFIG_RTW_DEBUG */
 
+#define CONFIG_PROC_DEBUG
+
 #define DBG_CONFIG_ERROR_DETECT
 #if 0
 #define DBG_XMIT_BUF
 #define DBG_XMIT_BUF_EXT
 #define CONFIG_FW_C2H_DEBUG
-#define DBG_THREAD_PID
-#define DBG_CPU_INFO
 #endif
 
-#define DBG_SDIO	1
-
-/*#define CONFIG_TDMADIG*/
-#ifdef CONFIG_TDMADIG
-#endif/*CONFIG_TDMADIG*/
+/* #define CONFIG_RTW_8822C_BETA_DEV */
+#ifdef CONFIG_RTW_8822C_BETA_DEV
+/* #define CONFIG_DISABLE_ODM */
+/* #define CONFIG_NO_FW */
+/* #define CONFIG_DEFAULT_PWR_BY_RATE_TABLE */
+#endif
 

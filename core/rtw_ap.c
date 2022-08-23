@@ -171,7 +171,7 @@ void rtw_add_bcn_ie(_adapter *padapter, WLAN_BSSID_EX *pnetwork, u8 index, u8 *d
 	u8	bmatch = _FALSE;
 	u8	*pie = pnetwork->IEs;
 	u8	*p = NULL, *dst_ie = NULL, *premainder_ie = NULL, *pbackup_remainder_ie = NULL;
-	u32	i, offset, ielen = 0, ie_offset, remainder_ielen = 0;
+	u32	i, offset, ielen, ie_offset, remainder_ielen = 0;
 
 	for (i = sizeof(NDIS_802_11_FIXED_IEs); i < pnetwork->IELength;) {
 		pIE = (PNDIS_802_11_VARIABLE_IEs)(pnetwork->IEs + i);
@@ -1797,7 +1797,7 @@ chbw_decision:
 				, pdvobj->padapters[i]->mlmeextpriv.cur_channel
 				, pdvobj->padapters[i]->mlmeextpriv.cur_bwmode
 				, pdvobj->padapters[i]->mlmeextpriv.cur_ch_offset
-				, ht_option, 0);
+				, ht_option);
 		}
 	}
 #endif /* defined(CONFIG_IOCTL_CFG80211) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)) */
@@ -2050,7 +2050,6 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 			psecuritypriv->wpa2_group_cipher = group_cipher;
 			psecuritypriv->wpa2_pairwise_cipher = pairwise_cipher;
 
-#ifdef CONFIG_IOCTL_CFG80211
 			/*
 			Kernel < v5.1, the auth_type set as NL80211_AUTHTYPE_AUTOMATIC 
 			in cfg80211_rtw_start_ap().
@@ -2059,7 +2058,6 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 			*/
 			if (CHECK_BIT(WLAN_AKM_TYPE_SAE, akm))
 				psecuritypriv->auth_type = NL80211_AUTHTYPE_SAE;
-#endif
 #if 0
 			switch (group_cipher) {
 			case WPA_CIPHER_NONE:
@@ -2217,6 +2215,7 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 		/* parsing HT_CAP_IE */
 		p = rtw_get_ie(ie + _BEACON_IE_OFFSET_, _HT_CAPABILITY_IE_, &ie_len, (pbss_network->IELength - _BEACON_IE_OFFSET_));
 		if (p && ie_len > 0) {
+			u8 rf_type = 0;
 			HT_CAP_AMPDU_FACTOR max_rx_ampdu_factor = MAX_AMPDU_FACTOR_64K;
 			struct rtw_ieee80211_ht_cap *pht_cap = (struct rtw_ieee80211_ht_cap *)(p + 2);
 
@@ -2265,10 +2264,12 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 
 			/* Update Supported MCS Set field */
 			{
+				struct hal_spec_t *hal_spec = GET_HAL_SPEC(padapter);
 				u8 rx_nss = 0;
 				int i;
 
-				rx_nss = GET_HAL_RX_NSS(padapter);
+				rtw_hal_get_hwreg(padapter, HW_VAR_RF_TYPE, (u8 *)(&rf_type));
+				rx_nss = rtw_min(rf_type_to_rf_rx_cnt(rf_type), hal_spec->rx_nss_num);
 
 				/* RX MCS Bitmask */
 				switch (rx_nss) {
@@ -2285,7 +2286,7 @@ int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len)
 					set_mcs_rate_by_mask(HT_CAP_ELE_RX_MCS_MAP(pht_cap), MCS_RATE_4R);
 					break;
 				default:
-					RTW_WARN("rf_type:%d or rx_nss:%u is not expected\n", GET_HAL_RFPATH(padapter), rx_nss);
+					RTW_WARN("rf_type:%d or rx_nss:%u is not expected\n", rf_type, hal_spec->rx_nss_num);
 				}
 				for (i = 0; i < 10; i++)
 					*(HT_CAP_ELE_RX_MCS_MAP(pht_cap) + i) &= padapter->mlmeextpriv.default_supported_mcs_set[i];
@@ -3829,13 +3830,11 @@ u8 ap_free_sta(_adapter *padapter, struct sta_info *psta, bool active, u16 reaso
 	_enter_critical_bh(&psta->lock, &irqL);
 	psta->state &= ~(_FW_LINKED | WIFI_UNDER_KEY_HANDSHAKE);
 
-#ifdef CONFIG_IOCTL_CFG80211
 	if ((psta->auth_len != 0) && (psta->pauth_frame != NULL)) {
 		rtw_mfree(psta->pauth_frame, psta->auth_len);
 		psta->pauth_frame = NULL;
 		psta->auth_len = 0;
 	}
-#endif /* CONFIG_IOCTL_CFG80211 */
 	_exit_critical_bh(&psta->lock, &irqL);
 
 	if (!MLME_IS_MESH(padapter)) {
@@ -4213,7 +4212,6 @@ void stop_ap_mode(_adapter *padapter)
 		/*_exit_critical_bh(&(pstapriv->sta_hash_lock), &irqL);*/
 	}
 
-	pmlmepriv->ap_isolate = 0;
 	rtw_free_mlme_priv_ie_data(pmlmepriv);
 
 #ifdef CONFIG_SUPPORT_MULTI_BCN
@@ -4461,19 +4459,12 @@ static u8 rtw_ap_update_chbw_by_ifbmp(struct dvobj_priv *dvobj, u8 ifbmp
 
 static u8 rtw_ap_ch_specific_chk(_adapter *adapter, u8 ch, u8 *bw, u8 *offset, const char *caller)
 {
-	struct rf_ctl_t *rfctl = adapter_to_rfctl(adapter);
-	RT_CHANNEL_INFO *chset = rfctl->channel_set;
-	int ch_idx;
+	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
+	RT_CHANNEL_INFO *chset = adapter_to_chset(adapter);
 	u8 ret = _SUCCESS;
 
-	ch_idx = rtw_chset_search_ch(chset, ch);
-	if (ch_idx < 0) {
+	if (rtw_chset_search_ch(chset, ch) < 0) {
 		RTW_WARN("%s ch:%u doesn't fit in chplan\n", caller, ch);
-		ret = _FAIL;
-		goto exit;
-	}
-	if (chset[ch_idx].ScanType == SCAN_PASSIVE) {
-		RTW_WARN("%s ch:%u is passive\n", caller, ch);
 		ret = _FAIL;
 		goto exit;
 	}
@@ -4486,8 +4477,8 @@ static u8 rtw_ap_ch_specific_chk(_adapter *adapter, u8 ch, u8 *bw, u8 *offset, c
 		goto exit;
 	}
 
-	while (!rtw_chset_is_chbw_valid(chset, ch, *bw, *offset, 0, 0)
-		|| (rtw_rfctl_dfs_domain_unknown(rfctl) && rtw_chset_is_dfs_chbw(chset, ch, *bw, *offset))
+	while (!rtw_chset_is_chbw_valid(chset, ch, *bw, *offset)
+		|| (rtw_odm_dfs_domain_unknown(dvobj) && rtw_is_dfs_chbw(ch, *bw, *offset))
 	) {
 		if (*bw > CHANNEL_WIDTH_20)
 			(*bw)--;
@@ -4497,7 +4488,7 @@ static u8 rtw_ap_ch_specific_chk(_adapter *adapter, u8 ch, u8 *bw, u8 *offset, c
 		}
 	}
 
-	if (rtw_rfctl_dfs_domain_unknown(rfctl) && rtw_chset_is_dfs_chbw(chset, ch, *bw, *offset)) {
+	if (rtw_odm_dfs_domain_unknown(dvobj) && rtw_is_dfs_chbw(ch, *bw, *offset)) {
 		RTW_WARN("%s DFS channel %u can't be used\n", caller, ch);
 		ret = _FAIL;
 		goto exit;
@@ -4508,20 +4499,22 @@ exit:
 }
 
 static bool rtw_ap_choose_chbw(_adapter *adapter, u8 sel_ch, u8 max_bw, u8 cur_ch
-	, u8 *ch, u8 *bw, u8 *offset, bool by_int_info, u8 mesh_only, const char *caller)
+	, u8 *ch, u8 *bw, u8 *offset, u8 mesh_only, const char *caller)
 {
+	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
 	struct rf_ctl_t *rfctl = adapter_to_rfctl(adapter);
 	bool ch_avail = _FALSE;
 
 #if defined(CONFIG_DFS_MASTER)
-	if (!rtw_rfctl_dfs_domain_unknown(rfctl)) {
+	if (!rtw_odm_dfs_domain_unknown(dvobj)) {
 		if (rfctl->radar_detected
 			&& rfctl->dbg_dfs_choose_dfs_ch_first
 		) {
 			ch_avail = rtw_choose_shortest_waiting_ch(rfctl, sel_ch, max_bw
 						, ch, bw, offset
 						, RTW_CHF_2G | RTW_CHF_NON_DFS
-						, cur_ch, by_int_info, mesh_only);
+						, cur_ch
+						, rfctl->ch_sel_same_band_prefer, mesh_only);
 			if (ch_avail == _TRUE) {
 				RTW_INFO("%s choose 5G DFS channel for debug\n", caller);
 				goto exit;
@@ -4534,7 +4527,8 @@ static bool rtw_ap_choose_chbw(_adapter *adapter, u8 sel_ch, u8 max_bw, u8 cur_c
 			ch_avail = rtw_choose_shortest_waiting_ch(rfctl, sel_ch, max_bw
 						, ch, bw, offset
 						, rfctl->dfs_ch_sel_d_flags
-						, cur_ch, by_int_info, mesh_only);
+						, cur_ch
+						, rfctl->ch_sel_same_band_prefer, mesh_only);
 			if (ch_avail == _TRUE) {
 				RTW_INFO("%s choose with dfs_ch_sel_d_flags:0x%02x for debug\n"
 					, caller, rfctl->dfs_ch_sel_d_flags);
@@ -4545,14 +4539,16 @@ static bool rtw_ap_choose_chbw(_adapter *adapter, u8 sel_ch, u8 max_bw, u8 cur_c
 		ch_avail = rtw_choose_shortest_waiting_ch(rfctl, sel_ch, max_bw
 					, ch, bw, offset
 					, 0
-					, cur_ch, by_int_info, mesh_only);
+					, cur_ch
+					, rfctl->ch_sel_same_band_prefer, mesh_only);
 	} else
 #endif /* defined(CONFIG_DFS_MASTER) */
 	{
 		ch_avail = rtw_choose_shortest_waiting_ch(rfctl, sel_ch, max_bw
 					, ch, bw, offset
 					, RTW_CHF_DFS
-					, cur_ch, by_int_info, mesh_only);
+					, cur_ch
+					, rfctl->ch_sel_same_band_prefer, mesh_only);
 	}
 #if defined(CONFIG_DFS_MASTER)
 exit:
@@ -4690,7 +4686,7 @@ u8 rtw_ap_chbw_decision(_adapter *adapter, u8 ifbmp, u8 excl_ifbmp
 			if (rtw_is_chbw_grouped(u_ch, u_bw, u_offset, dec_ch[i], dec_bw[i], dec_offset[i])) {
 				rtw_chset_sync_chbw(chset
 					, &dec_ch[i], &dec_bw[i], &dec_offset[i]
-					, &u_ch, &u_bw, &u_offset, 1, 0);
+					, &u_ch, &u_bw, &u_offset);
 				set_u_ch = _TRUE;
 
 				/* channel bw offset can be allowed, not need MCC */
@@ -4751,7 +4747,7 @@ u8 rtw_ap_chbw_decision(_adapter *adapter, u8 ifbmp, u8 excl_ifbmp
 			#endif /* CONFIG_MCC_MODE */
 
 			if (req_ch == 0 && dec_bw[i] > u_bw
-				&& rtw_chset_is_dfs_chbw(chset, u_ch, u_bw, u_offset)
+				&& rtw_is_dfs_chbw(u_ch, u_bw, u_offset)
 			) {
 				/* request comes from upper layer, prevent from additional channel waiting */
 				dec_bw[i] = u_bw;
@@ -4762,7 +4758,7 @@ u8 rtw_ap_chbw_decision(_adapter *adapter, u8 ifbmp, u8 excl_ifbmp
 			/* follow */
 			rtw_chset_sync_chbw(chset
 				, &dec_ch[i], &dec_bw[i], &dec_offset[i]
-				, &u_ch, &u_bw, &u_offset, 1, 0);
+				, &u_ch, &u_bw, &u_offset);
 		}
 
 		set_u_ch = _TRUE;
@@ -4771,7 +4767,6 @@ u8 rtw_ap_chbw_decision(_adapter *adapter, u8 ifbmp, u8 excl_ifbmp
 		/* autonomous decision */
 		u8 ori_ch = 0;
 		u8 max_bw;
-		bool by_int_info;
 
 		/* autonomous decision, not need MCC */
 		*chbw_allow = _TRUE;
@@ -4828,7 +4823,6 @@ u8 rtw_ap_chbw_decision(_adapter *adapter, u8 ifbmp, u8 excl_ifbmp
 			goto update_bss_chbw;
 
 choose_chbw:
-		by_int_info = req_ch == REQ_CH_INT_INFO ? 1 : 0;
 		req_ch = req_ch > 0 ? req_ch : 0;
 		max_bw = req_bw > REQ_BW_NONE ? req_bw : CHANNEL_WIDTH_20;
 		for (i = 0; i < dvobj->iface_nums; i++) {
@@ -4861,7 +4855,7 @@ choose_chbw:
 		}
 
 		ch_avail = rtw_ap_choose_chbw(adapter, req_ch, max_bw
-			, ori_ch, &u_ch, &u_bw, &u_offset, by_int_info, ifbmp_all_mesh, __func__);
+			, ori_ch, &u_ch, &u_bw, &u_offset, ifbmp_all_mesh, __func__);
 		if (ch_avail == _FALSE)
 			goto exit;
 
@@ -5180,7 +5174,7 @@ u16 rtw_ap_parse_sta_security_ie(_adapter *adapter, struct sta_info *sta, struct
 			sta->wpa2_pairwise_cipher = pairwise_cipher & sec->wpa2_pairwise_cipher;
 
 			sta->akm_suite_type = akm;
-			if (MLME_IS_AP(adapter) && (CHECK_BIT(WLAN_AKM_TYPE_SAE, akm)) && (MFP_NO == mfp_opt))
+			if ((CHECK_BIT(WLAN_AKM_TYPE_SAE, akm)) && (MFP_NO == mfp_opt))
 				status = WLAN_STATUS_ROBUST_MGMT_FRAME_POLICY_VIOLATION;
 
 			if (!sta->wpa2_group_cipher)
@@ -5228,9 +5222,7 @@ u16 rtw_ap_parse_sta_security_ie(_adapter *adapter, struct sta_info *sta, struct
 	else if (sec->mfp_opt >= MFP_OPTIONAL && mfp_opt >= MFP_OPTIONAL)
 		sta->flags |= WLAN_STA_MFP;
 
-#ifdef CONFIG_IOCTL_CFG80211
-	if (MLME_IS_AP(adapter) &&
-		(sec->auth_type == NL80211_AUTHTYPE_SAE) &&
+	if ((sec->auth_type == NL80211_AUTHTYPE_SAE) &&
 		(CHECK_BIT(WLAN_AKM_TYPE_SAE, sta->akm_suite_type)) &&
 		(WLAN_AUTH_OPEN == sta->authalg)) {
 		/* WPA3-SAE, PMK caching */
@@ -5241,7 +5233,6 @@ u16 rtw_ap_parse_sta_security_ie(_adapter *adapter, struct sta_info *sta, struct
 			RTW_INFO("SAE: PMKSA cache entry found\n");
 		}
 	}
-#endif
 
 	if (status != _STATS_SUCCESSFUL_)
 		goto exit;

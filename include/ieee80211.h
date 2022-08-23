@@ -241,8 +241,6 @@ typedef enum _RATEID_IDX_ {
 	RATEID_IDX_MIX2 = 12,
 	RATEID_IDX_VHT_3SS = 13,
 	RATEID_IDX_BGN_3SS = 14,
-	RATEID_IDX_BGN_4SS = 15,
-	RATEID_IDX_VHT_4SS = 16,
 } RATEID_IDX, *PRATEID_IDX;
 
 typedef enum _RATR_TABLE_MODE {
@@ -1036,8 +1034,6 @@ typedef enum _RATE_SECTION {
 	VHT_4SS = VHT_4SSMCS0_4SSMCS9,
 	RATE_SECTION_NUM,
 } RATE_SECTION;
-
-RATE_SECTION mgn_rate_to_rs(enum MGN_RATE rate);
 
 const char *rate_section_str(u8 section);
 
@@ -2012,7 +2008,7 @@ int rtw_check_network_type(unsigned char *rate, int ratelen, int channel);
 u8 rtw_check_invalid_mac_address(u8 *mac_addr, u8 check_local_bit);
 void rtw_macaddr_cfg(u8 *out, const u8 *hw_mac_addr);
 
-u16 rtw_ht_mcs_rate(u8 bw_40MHz, u8 short_GI, unsigned char *MCS_rate);
+u16 rtw_mcs_rate(u8 rf_type, u8 bw_40MHz, u8 short_GI, unsigned char *MCS_rate);
 u8	rtw_ht_mcsset_to_nss(u8 *supp_mcs_set);
 u32	rtw_ht_mcs_set_to_bitmap(u8 *mcs_set, u8 nss);
 

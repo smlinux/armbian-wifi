@@ -1012,7 +1012,6 @@ typedef enum _BTC_GET_TYPE {
 	BTC_GET_U4_SUPPORTED_FEATURE,
 	BTC_GET_U4_BT_DEVICE_INFO,
 	BTC_GET_U4_BT_FORBIDDEN_SLOT_VAL,
-	BTC_GET_U4_BT_A2DP_FLUSH_VAL,
 	BTC_GET_U4_WIFI_IQK_TOTAL,
 	BTC_GET_U4_WIFI_IQK_OK,
 	BTC_GET_U4_WIFI_IQK_FAIL,
@@ -1299,7 +1298,6 @@ struct btc_wifi_link_info {
 	BOOLEAN bhotspot;
 };
 
-#if 0
 typedef enum _BTC_MULTI_PORT_TDMA_MODE {
 	BTC_MULTI_PORT_TDMA_MODE_NONE=0,
 	BTC_MULTI_PORT_TDMA_MODE_2G_SCC_GO,
@@ -1312,22 +1310,6 @@ typedef struct btc_multi_port_tdma_info {
 	u1Byte start_time_from_bcn;
 	u1Byte bt_time;
 } BTC_MULTI_PORT_TDMA_INFO, *PBTC_MULTI_PORT_TDMA_INFO;
-#endif
-
-typedef enum _btc_concurrent_mode {
-	btc_concurrent_mode_none = 0,
-	btc_concurrent_mode_2g_go_miracast,
-	btc_concurrent_mode_2g_go_hotspot,
-	btc_concurrent_mode_2g_scc_go_miracast_sta,
-	btc_concurrent_mode_2g_scc_go_hotspot_sta,
-	btc_concurrent_mode_2g_gc,
-} btc_concurrent_mode, *pbtc_concurrent_mode;
-
-struct btc_concurrent_setting {
-	btc_concurrent_mode btc_concurrent_mode;
-	u1Byte start_time_from_bcn;
-	u1Byte bt_time;
-};
 
 typedef u1Byte
 (*BFP_BTC_R1)(

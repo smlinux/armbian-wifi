@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2007 - 2019 Realtek Corporation.
+ * Copyright(c) 2007 - 2018 Realtek Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -996,7 +996,6 @@ static void sdio_dump_dbg_reg(struct dvobj_priv *d, u8 write,
 	u8 *msg;
 #endif /* DBG_SDIO >= 2 */
 
-
 	sdio = &d->intf_data;
 	if (sdio->reg_dump_mark)
 		return;
@@ -1183,6 +1182,7 @@ int __must_check rtw_sdio_raw_read(struct dvobj_priv *d, unsigned int addr,
 			d->intf_data.cmd52_err_cnt++;
 		} else {
 			d->intf_data.cmd53_err_cnt++;
+
 #if (DBG_SDIO >= 1)
 			sdio_dump_dbg_reg(d, 0, addr, len);
 #endif /* DBG_SDIO >= 1 */

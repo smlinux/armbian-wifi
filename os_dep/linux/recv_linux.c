@@ -355,7 +355,11 @@ static int napi_recv(_adapter *padapter, int budget)
 
 #ifdef CONFIG_RTW_GRO
 		if (pregistrypriv->en_gro) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
+			if (rtw_napi_gro_receive(&padapter->napi, pskb) != GRO_MERGED_FREE)
+#else
 			if (rtw_napi_gro_receive(&padapter->napi, pskb) != GRO_DROP)
+#endif
 				rx_ok = _TRUE;
 			goto next;
 		}
@@ -433,7 +437,7 @@ void rtw_os_recv_indicate_pkt(_adapter *padapter, _pkt *pkt, union recv_frame *r
 
 		DBG_COUNTER(padapter->rx_logs.os_indicate);
 
-		if (MLME_IS_AP(padapter) && !pmlmepriv->ap_isolate) {
+		if (MLME_IS_AP(padapter)) {
 			_pkt *pskb2 = NULL;
 			struct sta_info *psta = NULL;
 			struct sta_priv *pstapriv = &padapter->stapriv;
@@ -714,8 +718,9 @@ _recv_indicatepkt_drop:
 
 void rtw_os_read_port(_adapter *padapter, struct recv_buf *precvbuf)
 {
-#ifdef CONFIG_USB_HCI
 	struct recv_priv *precvpriv = &padapter->recvpriv;
+
+#ifdef CONFIG_USB_HCI
 
 	precvbuf->ref_cnt--;
 
